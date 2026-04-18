@@ -1,0 +1,111 @@
+@import "tailwindcss";
+@custom-variant dark (&:where(.dark, .dark *));
+
+@theme {
+  --font-sans: "Plus Jakarta Sans", "Segoe UI", sans-serif;
+  --color-brand-50: #eef2ff;
+  --color-brand-100: #e0e7ff;
+  --color-brand-300: #a5b4fc;
+  --color-brand-500: #6366f1;
+  --color-brand-600: #4f46e5;
+  --color-brand-700: #4338ca;
+}
+
+@layer base {
+  * {
+    @apply border-slate-200;
+  }
+
+  html {
+    @apply scroll-smooth;
+  }
+
+  html,
+  body,
+  #root {
+    overflow-x: clip;
+  }
+
+  body {
+    @apply min-h-screen bg-slate-100 text-slate-700 antialiased transition-colors duration-300;
+    background-image:
+      radial-gradient(circle at top left, rgba(99, 102, 241, 0.12), transparent 28%),
+      radial-gradient(circle at bottom right, rgba(249, 115, 22, 0.1), transparent 25%),
+      linear-gradient(180deg, #f8fafc 0%, #eef2ff 48%, #f8fafc 100%);
+  }
+
+  body.dark {
+    @apply bg-slate-950 text-slate-200;
+    background-image:
+      radial-gradient(circle at top left, rgba(99, 102, 241, 0.18), transparent 28%),
+      radial-gradient(circle at bottom right, rgba(249, 115, 22, 0.12), transparent 25%),
+      linear-gradient(180deg, #020617 0%, #0f172a 48%, #020617 100%);
+  }
+
+  @media (max-width: 639px) {
+    body {
+      background-image: linear-gradient(180deg, #f8fafc 0%, #eef2ff 48%, #f8fafc 100%);
+    }
+
+    body.dark {
+      background-image: linear-gradient(180deg, #020617 0%, #0f172a 48%, #020617 100%);
+    }
+  }
+
+  #root {
+    @apply min-h-screen;
+  }
+
+  select.app-select {
+    background-image: none;
+  }
+
+  select.app-select option {
+    color: #334155;
+    background: #ffffff;
+  }
+
+  .dark select.app-select option {
+    color: #e2e8f0;
+    background: #0f172a;
+  }
+}
+
+@layer components {
+  .glass-panel {
+    @apply rounded-[28px] border border-white/65 bg-white/85 shadow-[0_24px_10px_-28px_rgba(15,23,42,0.35)] backdrop-blur-xl;
+  }
+
+  .dark .glass-panel {
+    @apply border-white/10 bg-slate-900/80 shadow-[0_24px_70px_-28px_rgba(15,23,42,0.7)];
+  }
+
+  .panel-grid {
+    @apply grid gap-6 xl:grid-cols-[minmax(0,1.4fr)_minmax(0,0.9fr)];
+  }
+
+  .page-shell {
+    @apply space-y-6;
+  }
+
+  .section-title {
+    @apply text-lg font-semibold tracking-tight text-slate-900 dark:text-white;
+  }
+
+  .section-subtitle {
+    @apply text-sm text-slate-500 dark:text-slate-400;
+  }
+
+  .scrollbar-hidden {
+    -ms-overflow-style: none;
+    scrollbar-width: none;
+  }
+
+  .scrollbar-hidden::-webkit-scrollbar {
+    display: none;
+  }
+
+  .app-select {
+    letter-spacing: -0.01em;
+  }
+}
