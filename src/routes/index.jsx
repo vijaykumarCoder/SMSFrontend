@@ -1,5 +1,5 @@
 import { useEffect } from 'react'
-import { BrowserRouter, Navigate, Route, Routes } from 'react-router-dom'
+import { HashRouter, Navigate, Route, Routes } from 'react-router-dom'
 import { MainLayout } from '../components/layout/MainLayout'
 import { AttendancePage } from '../pages/attendance/AttendancePage'
 import { ClassesPage } from '../pages/classes/ClassesPage'
@@ -29,7 +29,7 @@ function ThemeSync() {
 
 export function AppRouter() {
   return (
-    <BrowserRouter>
+    <HashRouter>
       <ThemeSync />
       <Routes>
         <Route path="/login" element={<LoginPage />} />
@@ -50,6 +50,6 @@ export function AppRouter() {
           <Route path="/settings" element={<SettingsPage />} />
         </Route>
       </Routes>
-    </BrowserRouter>
+    </HashRouter>
   )
 }
