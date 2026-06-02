@@ -1,12 +1,19 @@
 import { Bell, ChevronDown, Menu, MessageSquareMore, Moon, Search, SunMedium } from 'lucide-react'
-import { Link } from 'react-router-dom'
+import { useNavigate } from 'react-router-dom'
 import { useAppStore } from '../../store/appStore'
 import { Button } from '../ui/Button'
 
 export function Navbar() {
+  const navigate = useNavigate()
   const theme = useAppStore((state) => state.theme)
   const toggleTheme = useAppStore((state) => state.toggleTheme)
   const toggleMobileSidebar = useAppStore((state) => state.toggleMobileSidebar)
+  const clearAuth = useAppStore((state) => state.clearAuth)
+
+  const handleLogout = () => {
+    clearAuth()
+    navigate('/login', { replace: true })
+  }
 
   return (
     <header className="glass-panel sticky top-0 z-20 mb-1 flex flex-wrap items-center justify-between gap-3 rounded-none px-3 py-3 sm:px-4">
@@ -21,12 +28,13 @@ export function Navbar() {
       </div>
 
       <div className="ml-auto flex min-w-0 items-center gap-3">
-        <Link
-          to="/login"
+        <button
+          type="button"
+          onClick={handleLogout}
           className="hidden h-11 items-center rounded-2xl bg-brand-600 px-5 text-sm font-medium text-white shadow-lg shadow-brand-500/20 transition hover:-translate-y-0.5 hover:bg-brand-700 md:inline-flex"
         >
-          Login
-        </Link>
+          Logout
+        </button>
         <div className="flex min-w-0 items-center gap-1 rounded-[22px] bg-white px-2 py-2 text-slate-900 dark:bg-slate-900 dark:text-white sm:gap-2 sm:px-3">
           <button className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full text-slate-700 transition hover:bg-slate-50 dark:text-slate-200 dark:hover:bg-slate-800">
             <Bell size={16} />

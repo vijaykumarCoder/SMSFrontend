@@ -1,10 +1,13 @@
 import { create } from 'zustand'
+import { clearAuthTokens, getAccessToken, saveAuthTokens } from '../services/apiService'
 import { classesSeed, financePayments, recentActivities, studentsSeed, teachersSeed } from '../utils/mockData'
 
 export const useAppStore = create((set) => ({
   theme: 'light',
   sidebarCollapsed: false,
   mobileSidebarOpen: false,
+  accessToken: getAccessToken(),
+  isAuthenticated: Boolean(getAccessToken()),
   students: studentsSeed,
   teachers: teachersSeed,
   classes: classesSeed,
@@ -34,4 +37,20 @@ export const useAppStore = create((set) => ({
     set((state) => ({
       classes: [{ id: `class-${Date.now()}`, ...classItem }, ...state.classes],
     })),
+  setAuth: (auth) => {
+    saveAuthTokens(auth)
+
+    set({
+      accessToken: auth.accessToken,
+      isAuthenticated: Boolean(auth.accessToken),
+    })
+  },
+  clearAuth: () => {
+    clearAuthTokens()
+
+    set({
+      accessToken: '',
+      isAuthenticated: false,
+    })
+  },
 }))

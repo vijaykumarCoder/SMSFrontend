@@ -12,13 +12,14 @@ export function Sidebar({ collapsed }) {
 
   return (
     <>
-      <div
-        className={cn(
-          'fixed inset-0 z-30 bg-slate-950/35 transition-opacity duration-300 lg:hidden',
-          mobileSidebarOpen ? 'opacity-100' : 'pointer-events-none opacity-0',
-        )}
-        onClick={closeMobileSidebar}
-      />
+      {mobileSidebarOpen ? (
+        <button
+          type="button"
+          aria-label="Close navigation menu"
+          className="fixed inset-0 z-30 bg-slate-950/35 lg:hidden"
+          onClick={closeMobileSidebar}
+        />
+      ) : null}
       <aside
         className={cn(
           'fixed inset-y-0 left-0 z-40 flex w-[280px] flex-col overflow-hidden rounded-none border-y-0 border-l-0 border-white/60 bg-gradient-to-b from-brand-700 via-brand-600 to-slate-900 p-4 text-white transition-all duration-300 lg:flex',

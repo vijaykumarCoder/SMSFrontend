@@ -1,5 +1,9 @@
-import { useEffect } from 'react'
-import { HashRouter, Navigate, Route, Routes } from 'react-router-dom'
+import { BrowserRouter, Routes, Route, Navigate } from "react-router-dom";
+import { useEffect } from "react";
+
+import { ProtectedRoute } from "./ProtectedRoute";
+import { PublicRoute }    from "./PublicRoute";
+
 import { MainLayout } from '../components/layout/MainLayout'
 import { AttendancePage } from '../pages/attendance/AttendancePage'
 import { ClassesPage } from '../pages/classes/ClassesPage'
@@ -16,6 +20,21 @@ import { StudentRegistration } from '../pages/students/StudentRegistration'
 import { StudentsPage } from '../pages/students/StudentsPage'
 import { TeachersPage } from '../pages/teachers/TeachersPage'
 import { useAppStore } from '../store/appStore'
+import { SchoolRegistration } from '../pages/schools/SchoolRegistration'
+import { useAuth } from '../context/AuthContext'
+// import { setToken } from '../pages/utils/api'
+
+// Listens for forced logouts triggered by the axios interceptor
+function AuthLogoutListener() {
+  const { logout } = useAuth();
+  useEffect(() => {
+    const handle = () => logout();
+    window.addEventListener("auth:logout", handle);
+    return () => window.removeEventListener("auth:logout", handle);
+  }, [logout]);
+  return null;
+}
+
 
 function ThemeSync() {
   const theme = useAppStore((state) => state.theme)
@@ -26,30 +45,39 @@ function ThemeSync() {
 
   return null
 }
-
 export function AppRouter() {
   return (
-    <HashRouter>
+    <BrowserRouter>
+      <AuthLogoutListener />   {/* ← handles forced logout from interceptor */}
       <ThemeSync />
       <Routes>
-        <Route path="/login" element={<LoginPage />} />
-        <Route path="/signup" element={<SignupPage />} />
-        <Route path="/student-registration" element={<StudentRegistration />} />
-        <Route element={<MainLayout />}>
+        {/* ── Public routes ───────────────────────────────────────── */}
+        <Route path="/login"  element={<PublicRoute><LoginPage /></PublicRoute>} />
+        <Route path="/signup" element={<PublicRoute><SignupPage /></PublicRoute>} />
+
+        {/* ── Standalone protected routes (no MainLayout) ─────────── */}
+        <Route path="/student-registration" element={<PublicRoute><StudentRegistration /></PublicRoute>} />
+        <Route path="/school-registration"  element={<PublicRoute><SchoolRegistration /></PublicRoute>} />
+
+        {/* ── Main app shell (sidebar + header layout) ────────────── */}
+        <Route element={<ProtectedRoute><MainLayout /></ProtectedRoute>}>
           <Route index element={<Navigate to="/dashboard" replace />} />
-          <Route path="/dashboard" element={<DashboardPage />} />
-          <Route path="/classes" element={<ClassesPage />} />
-          <Route path="/students" element={<StudentsPage />} />
-          <Route path="/teachers" element={<TeachersPage />} />
-          <Route path="/attendance" element={<AttendancePage />} />
+          <Route path="/dashboard"      element={<DashboardPage />} />
+          <Route path="/classes"        element={<ClassesPage />} />
+          <Route path="/students"       element={<StudentsPage />} />
+          <Route path="/teachers"       element={<TeachersPage />} />
+          <Route path="/attendance"     element={<AttendancePage />} />
           <Route path="/mark-attendance" element={<MarkAttendancePage />} />
-          <Route path="/exams" element={<ExamsPage />} />
-          <Route path="/finance" element={<FinancePage />} />
-          <Route path="/events" element={<EventsPage />} />
-          <Route path="/file-manager" element={<FileManagerPage />} />
-          <Route path="/settings" element={<SettingsPage />} />
+          <Route path="/exams"          element={<ExamsPage />} />
+          <Route path="/finance"        element={<FinancePage />} />
+          <Route path="/events"         element={<EventsPage />} />
+          <Route path="/file-manager"   element={<FileManagerPage />} />
+          <Route path="/settings"       element={<SettingsPage />} />
         </Route>
+
+        {/* ── Catch-all ───────────────────────────────────────────── */}
+        <Route path="*" element={<Navigate to="/dashboard" replace />} />
       </Routes>
-    </HashRouter>
+    </BrowserRouter>
   )
 }
