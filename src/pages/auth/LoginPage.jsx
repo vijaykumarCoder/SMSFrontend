@@ -1,16 +1,57 @@
-import { Check, ChevronLeft, Fingerprint, LockKeyhole, Mail } from 'lucide-react'
+import { useState } from 'react'
+import { Check, ChevronLeft, Fingerprint, LoaderCircle, LockKeyhole, Mail } from 'lucide-react'
 import { Link, useNavigate } from 'react-router-dom'
 import { Button } from '../../components/ui/Button'
 import { Input } from '../../components/ui/Input'
+import { apiService } from '../../services/apiService'
+import { useAppStore } from '../../store/appStore'
 import { AuthShowcase } from './AuthShowcase'
+import api from "../../utils/api";
+import { useAuth } from '../../context/AuthContext'
 
 export function LoginPage() {
   const navigate = useNavigate()
+  const setAuth = useAppStore((state) => state.setAuth)
+  const [email, setEmail] = useState('')
+  const [password, setPassword] = useState('')
+  const [error, setError] = useState('')
+  const [isSubmitting, setIsSubmitting] = useState(false)
 
-  const handleSubmit = (event) => {
-    event.preventDefault()
-    navigate('/dashboard')
+  const { login } = useAuth();
+
+
+// ✅ Correct
+const handleSubmit = async (event) => {
+  event.preventDefault()
+  setError('')
+  setIsSubmitting(true)
+
+  try {
+    const { data } = await api.post("/users/login/", { email, password }); // ← your state vars
+    console.log("getting access token", data.data, data.data.access_token)
+    login(data.data.access_token);
+    navigate('/dashboard', { replace: true })
+  } catch {
+    setError('Invalid credentials')
+  } finally {
+    setIsSubmitting(false)
   }
+}
+  // const handleSubmit = async (event) => {
+  //   event.preventDefault()
+  //   setError('')
+  //   setIsSubmitting(true)
+
+  //   try {
+  //     const auth = await apiService.login({ email, password })
+  //     setAuth(auth)
+  //     navigate('/dashboard', { replace: true })
+  //   } catch {
+  //     setError('Invalid credentials')
+  //   } finally {
+  //     setIsSubmitting(false)
+  //   }
+  // }
 
   return (
     <div className="relative h-screen overflow-hidden bg-white">
@@ -51,8 +92,24 @@ export function LoginPage() {
             </p>
 
             <form className="mt-6 space-y-4" onSubmit={handleSubmit}>
-              <Input type="email" icon={Mail} placeholder="stanley@gmail.com" defaultValue="stanley@gmail.com" />
-              <Input type="password" icon={LockKeyhole} placeholder="Enter password" defaultValue="password12345" />
+              <Input
+                type="email"
+                icon={Mail}
+                placeholder="chiru123@gmail.com"
+                value={email}
+                onChange={(event) => setEmail(event.target.value)}
+                autoComplete="email"
+                required
+              />
+              <Input
+                type="password"
+                icon={LockKeyhole}
+                placeholder="Enter password"
+                value={password}
+                onChange={(event) => setPassword(event.target.value)}
+                autoComplete="current-password"
+                required
+              />
 
               <div className="flex flex-col gap-3 text-sm text-slate-500 sm:flex-row sm:items-center sm:justify-between">
                 <label className="inline-flex items-center gap-3 text-slate-500">
@@ -67,8 +124,16 @@ export function LoginPage() {
                 </button>
               </div>
 
-              <Button type="submit" variant="brand" className="mt-2 h-12 min-w-[132px] rounded-2xl px-8">
-                Sign In
+              {error ? <p className="text-sm font-medium text-rose-500">{error}</p> : null}
+
+              <Button
+                type="submit"
+                variant="brand"
+                className="mt-2 h-12 min-w-[132px] rounded-2xl px-8"
+                disabled={isSubmitting}
+              >
+                {isSubmitting ? <LoaderCircle size={16} className="animate-spin" /> : null}
+                {isSubmitting ? 'Signing In' : 'Sign In'}
               </Button>
             </form>
 
