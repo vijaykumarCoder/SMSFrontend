@@ -56,8 +56,8 @@ export function AppRouter() {
         <Route path="/signup" element={<PublicRoute><SignupPage /></PublicRoute>} />
 
         {/* ── Standalone protected routes (no MainLayout) ─────────── */}
-        <Route path="/student-registration" element={<PublicRoute><StudentRegistration /></PublicRoute>} />
-        <Route path="/school-registration"  element={<PublicRoute><SchoolRegistration /></PublicRoute>} />
+        <Route path="/student-registration" element={<StudentRegistration />} />
+        <Route path="/school-registration"  element={<SchoolRegistration />} />
 
         {/* ── Main app shell (sidebar + header layout) ────────────── */}
         <Route element={<ProtectedRoute><MainLayout /></ProtectedRoute>}>

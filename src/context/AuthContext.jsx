@@ -114,7 +114,7 @@ export function AuthProvider({ children }) {
   const logout = useCallback(async () => {
     try {
       const { default: api } = await import("../utils/api");
-      await api.post("/auth/logout");
+      await api.post("/users/logout");
     } catch {
       console.log('error=')
     }

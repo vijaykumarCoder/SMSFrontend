@@ -2,16 +2,19 @@ import { Bell, ChevronDown, Menu, MessageSquareMore, Moon, Search, SunMedium } f
 import { useNavigate } from 'react-router-dom'
 import { useAppStore } from '../../store/appStore'
 import { Button } from '../ui/Button'
+import { useAuth } from '../../context/AuthContext'
 
 export function Navbar() {
   const navigate = useNavigate()
   const theme = useAppStore((state) => state.theme)
   const toggleTheme = useAppStore((state) => state.toggleTheme)
   const toggleMobileSidebar = useAppStore((state) => state.toggleMobileSidebar)
-  const clearAuth = useAppStore((state) => state.clearAuth)
 
+  const { logout } = useAuth();
+  
   const handleLogout = () => {
-    clearAuth()
+    // clearAuth()
+    logout()
     navigate('/login', { replace: true })
   }
 
