@@ -111,7 +111,8 @@ export function StudentRegistration() {
                 <Input label="Phone number" type="tel" icon={Phone} name="phoneNumber" placeholder="+91 98765 43210" />
                 <Input label="Emergency contact name" type="text" icon={Users} name="emergencyName" placeholder="Enter emergency contact name" />
                 <Input label="Emergency contact phone" type="tel" icon={Phone} name="emergencyPhone" placeholder="+91 98765 43210" />
-                <Input label="School name" type="text" icon={Building2} name="schoolName" placeholder="Enter school name" />
+                <Input label="School code" type="text" icon={Building2} name="schoolName" placeholder="Enter school code" />
+                {/* <Input label="School name" type="text" icon={Building2} name="schoolName" placeholder="Enter school name" /> */}
               </div>
 
               <TextAreaField label="Address" name="address" placeholder="Enter full home address" />
