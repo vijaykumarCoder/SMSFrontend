@@ -85,6 +85,52 @@ async function login(payload) {
   }
 }
 
+async function getAllRegisteredStudents(schoolId) {
+  if (!schoolId) {
+    throw new Error('School id is required')
+  }
+
+  return apiRequest(`/students/getAllRegisterdStudents/${schoolId}`, {
+    method: 'GET',
+  })
+}
+
+async function updateRegisteredStudent(studentId, payload) {
+  if (!studentId) {
+    throw new Error('Student id is required')
+  }
+
+  return apiRequest(`/students/studentRegister/${studentId}`, {
+    method: 'PUT',
+    body: JSON.stringify(payload),
+  })
+}
+
+async function deleteRegisteredStudent(studentId) {
+  if (!studentId) {
+    throw new Error('Student id is required')
+  }
+
+  return apiRequest(`/students/studentRegister/${studentId}`, {
+    method: 'DELETE',
+  })
+}
+
+async function enrollStudent(payload) {
+  if (!payload?.student_register_id) {
+    throw new Error('Student register id is required')
+  }
+
+  return apiRequest('/students/studentEnroll', {
+    method: 'POST',
+    body: JSON.stringify(payload),
+  })
+}
+
 export const apiService = {
   login,
+  getAllRegisteredStudents,
+  updateRegisteredStudent,
+  deleteRegisteredStudent,
+  enrollStudent,
 }

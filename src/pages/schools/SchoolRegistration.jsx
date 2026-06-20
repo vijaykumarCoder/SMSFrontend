@@ -55,10 +55,10 @@ export function SchoolRegistration() {
     } = useForm({
         defaultValues: {
             school_name: '',
-            school_code: '',
-            principal_name: '',
+            registration_code: '',
             email: '',
             phone: '',
+            state: '',
             city: '',
             zipcode: '',
             address: '',
@@ -69,20 +69,20 @@ export function SchoolRegistration() {
         try {
             const payload = {
                 school_name: data.school_name.trim(),
-                school_code: data.school_code.trim(),
-                principal_name: data.principal_name.trim(),
+                school_code: data.registration_code.trim(),
                 email: data.email.trim().toLowerCase(),
                 phone: data.phone.trim(),
+                state: data.state.trim(),
                 city: data.city.trim(),
                 zipcode: data.zipcode.trim(),
-                address: data.address.trim(),
+                school_address: data.address.trim(),
             }
 
 
             console.log('Payload =>', payload)
 
             const response = await axios.post(
-                'http://127.0.0.1:8000/schools/',
+                'http://127.0.0.1:8000/schools/createSchool',
                 payload,
                 {
                     headers: {
@@ -165,7 +165,7 @@ export function SchoolRegistration() {
                             </p>
                         </div>
 
-                        <div className="rounded-[24px] border border-white/10 bg-white/5 p-4">
+                        {/* <div className="rounded-[24px] border border-white/10 bg-white/5 p-4">
                             <UserRound size={22} />
                             <h2 className="mt-3 text-lg font-semibold">
                                 Principal Details
@@ -173,7 +173,7 @@ export function SchoolRegistration() {
                             <p className="mt-2 text-sm text-slate-300">
                                 Configure the school administrator account.
                             </p>
-                        </div>
+                        </div> */}
                     </div>
                 </aside>
 
@@ -196,20 +196,11 @@ export function SchoolRegistration() {
                             />
 
                             <Input
-                                label="School Code"
+                                label="School Registration Number"
                                 icon={School}
-                                error={errors.school_code?.message}
-                                {...register('school_code', {
-                                    required: 'School code is required',
-                                })}
-                            />
-
-                            <Input
-                                label="Principal Name"
-                                icon={UserRound}
-                                error={errors.principal_name?.message}
-                                {...register('principal_name', {
-                                    required: 'Principal name is required',
+                                error={errors.registration_code?.message}
+                                {...register('registration_code', {
+                                    required: 'School Registration Number is required',
                                 })}
                             />
 
@@ -229,6 +220,15 @@ export function SchoolRegistration() {
                                 error={errors.phone?.message}
                                 {...register('phone', {
                                     required: 'Phone number is required',
+                                })}
+                            />
+
+                            <Input
+                                label="State"
+                                icon={MapPin}
+                                error={errors.state?.message}
+                                {...register('state', {
+                                    required: 'state is required',
                                 })}
                             />
 

@@ -16,6 +16,7 @@ export const navigationItems = [
   { label: 'Dashboard', icon: LayoutDashboard, path: '/dashboard' },
   { label: 'Classes', icon: Users, path: '/classes' },
   { label: 'Students', icon: GraduationCap, path: '/students' },
+  { label: 'Registered students', icon: GraduationCap, path: '/registered-students' },
   { label: 'Teachers', icon: UserSquare2, path: '/teachers' },
   { label: 'Attendance', icon: CalendarCheck2, path: '/attendance' },
   { label: 'Mark Attendance', icon: ClipboardCheck, path: '/mark-attendance' },
