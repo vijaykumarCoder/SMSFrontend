@@ -67,7 +67,7 @@ async function apiRequest(path, options = {}) {
 }
 
 async function login(payload) {
-  const response = await apiRequest('/users/login', {
+  const response = await apiRequest('/users/login/', {
     method: 'POST',
     body: JSON.stringify(payload),
   })
