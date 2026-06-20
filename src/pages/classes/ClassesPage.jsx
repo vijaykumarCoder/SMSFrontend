@@ -8,6 +8,7 @@ import { EmptyState } from '../../components/ui/EmptyState'
 import { Input, Select } from '../../components/ui/Input'
 import { Modal } from '../../components/ui/Modal'
 import { Table } from '../../components/ui/Table'
+import axios from 'axios'
 
 const sectionOptions = ['A', 'B', 'C', 'D', 'E', 'F']
 
@@ -122,25 +123,36 @@ export function ClassesPage() {
     [],
   )
 
-  const onSubmit = (values) => {
-    const duplicateExists = classes.some(
-      (item) => item.className.trim().toLowerCase() === values.className.trim().toLowerCase() && item.section === values.section,
-    )
-
-    if (duplicateExists) {
-      setError('section', { type: 'manual', message: 'This section already exists for the selected class' })
-      return
-    }
-
-    addClass({
+const onSubmit = async (values) => {
+  try {
+    const payload = {
       className: values.className.trim(),
       section: values.section,
       teacherId: values.teacherId,
+      
+    }
+
+    await axios.post(
+      'http://127.0.0.1:8000/classes/createClass/',
+      payload
+    )
+
+    reset({
+      className: '',
+      section: 'A',
+      teacherId: teachers[0]?.id ?? '',
     })
-    clearErrors()
-    reset({ className: '', section: 'A', teacherId: teachers[0]?.id ?? '' })
+
     setModalOpen(false)
+  } catch (error) {
+    if (error.response?.status === 409) {
+      setError('section', {
+        type: 'server',
+        message: 'This section already exists for the selected class',
+      })
+    }
   }
+}
 
   return (
     <div className="page-shell">

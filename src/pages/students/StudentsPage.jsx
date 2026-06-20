@@ -102,10 +102,10 @@ export function StudentsPage() {
               Manage enrollment records, class assignments and contact information.
             </p>
           </div>
-          <Button variant="brand" onClick={openCreateModal}>
+          {/* <Button variant="brand" onClick={openCreateModal}>
             <Plus size={18} />
             Add Student
-          </Button>
+          </Button> */}
         </div>
 
         <div className="mt-6 grid gap-4 md:grid-cols-[minmax(0,1fr)_220px]">

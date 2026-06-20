@@ -27,7 +27,7 @@ const handleSubmit = async (event) => {
   setIsSubmitting(true)
 
   try {
-    const { data } = await api.post("/users/login/", { email, password }); // ← your state vars
+    const { data } = await api.post("/users/login", { email, password }); // ← your state vars
     console.log("getting access token", data.data, data.data.access_token)
     login(data.data.access_token);
     navigate('/dashboard', { replace: true })

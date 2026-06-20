@@ -16,8 +16,9 @@ import { MarkAttendancePage } from '../pages/attendance/MarkAttendancePage'
 import { LoginPage } from '../pages/auth/LoginPage'
 import { SignupPage } from '../pages/auth/SignupPage'
 import { SettingsPage } from '../pages/settings/SettingsPage'
-import { StudentRegistration } from '../pages/students/StudentRegistration'
 import { StudentsPage } from '../pages/students/StudentsPage'
+import { StudentRegistration } from '../pages/students/StudentRegistration'
+import { RegisteredStudentsPage } from '../pages/students/RegisteredStudentsPage'
 import { TeachersPage } from '../pages/teachers/TeachersPage'
 import { useAppStore } from '../store/appStore'
 import { SchoolRegistration } from '../pages/schools/SchoolRegistration'
@@ -65,6 +66,8 @@ export function AppRouter() {
           <Route path="/dashboard"      element={<DashboardPage />} />
           <Route path="/classes"        element={<ClassesPage />} />
           <Route path="/students"       element={<StudentsPage />} />
+          <Route path="/registered-students" element={<RegisteredStudentsPage />} />
+          {/* <Route path="/students"       element={<Navigate to="/registered-students" replace />} /> */}
           <Route path="/teachers"       element={<TeachersPage />} />
           <Route path="/attendance"     element={<AttendancePage />} />
           <Route path="/mark-attendance" element={<MarkAttendancePage />} />
