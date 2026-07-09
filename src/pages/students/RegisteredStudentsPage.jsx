@@ -14,7 +14,7 @@ import { useAppStore } from '../../store/appStore'
 import { apiService } from '../../services/apiService'
 import api from '../../utils/api'
 
-const DEFAULT_SCHOOL_ID = 2
+const DEFAULT_ORGANIZATION_ID = localStorage.getItem("DEFAULT_ORGANIZATION_ID")
 const DEFAULT_ACADEMIC_YEAR_ID = 1
 const SECTION_OPTIONS = ['A', 'B', 'C', 'D', 'E', 'F']
 const SECTION_ID_BY_LETTER = {
@@ -39,7 +39,7 @@ const formDefaults = {
   city: '',
   state: '',
   how_do_you_get_to_know: 'Through application',
-  school_id: DEFAULT_SCHOOL_ID,
+  organization_id: DEFAULT_ORGANIZATION_ID,
 }
 
 function readFirstValue(record, keys) {
@@ -178,7 +178,7 @@ function toNumberIfNumeric(value) {
 function toPayload(values) {
   return {
     ...values,
-    school_id: DEFAULT_SCHOOL_ID,
+    organization_id: DEFAULT_ORGANIZATION_ID,
     how_do_you_get_to_know: values.how_do_you_get_to_know || 'Through application',
   }
 }
@@ -273,8 +273,8 @@ export function RegisteredStudentsPage() {
       setError('')
 
       try {
-        // const payload = await apiService.getAllRegisteredStudents(DEFAULT_SCHOOL_ID)
-         const payload = await api.get(`/students/getAllRegisterdStudents/2`)
+        // const payload = await apiService.getAllRegisteredStudents(DEFAULT_ORGANIZATION_ID)
+         const payload = await api.get(`/students/getAllRegisterdStudents/${DEFAULT_ORGANIZATION_ID}`)
 
         if (payload?.status === 'error') {
           throw new Error(payload.message || 'Failed to load registered students')
@@ -394,8 +394,8 @@ export function RegisteredStudentsPage() {
         student_register_id: 1,
         // student_register_id: values.student_register_id,
         student_name: values.student_name.trim(),
-        school_id: DEFAULT_SCHOOL_ID,
-        class_id: toNumberIfNumeric(values.class_id),
+        organization_id: DEFAULT_ORGANIZATION_ID,
+        class_id: 1,
         section_id: toNumberIfNumeric(values.section_id),
         academic_year_id: DEFAULT_ACADEMIC_YEAR_ID,
         admission_no: values.admission_no.trim(),
