@@ -29,6 +29,7 @@ const handleSubmit = async (event) => {
   try {
     const { data } = await api.post("/users/login/", { email, password }); // ← your state vars
     console.log("getting access token", data.data, data.data.access_token)
+    localStorage.setItem("DEFAULT_ORGANIZATION_ID", data.data.organization_id)
     login(data.data.access_token);
     navigate('/dashboard', { replace: true })
   } catch {

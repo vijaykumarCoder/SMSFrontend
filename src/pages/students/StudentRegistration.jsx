@@ -14,6 +14,7 @@ import { useForm } from 'react-hook-form'
 
 import { Button } from '../../components/ui/Button'
 import { Input } from '../../components/ui/Input'
+const DEFAULT_ORGANIZATION_ID = localStorage.getItem("DEFAULT_ORGANIZATION_ID")
 
 function TextAreaField({
   label,
@@ -70,7 +71,7 @@ export function StudentRegistration() {
   const onSubmit = async (data) => {
     try {
       const payload = {
-        school_id: 2,
+        organization_id: DEFAULT_ORGANIZATION_ID,
         student_name: data.full_name.trim(),
         class_name: data.class_name.trim(),
         father_name: data.father_name.trim(),
