@@ -193,10 +193,11 @@ export function ClassesPage() {
     setError('')
 
     try {
+       console.log("class_name", values.className, values.className.trim())
       await api.post(CREATE_CLASS_API, {
         organization_id: DEFAULT_ORGANIZATION_ID,
-        class_name: values.className.trim(),
-        section_name: values.section,
+        class_name: `Class ${values.className.trim()}`,
+        section_name: `Section ${values.section}`,
       })
 
       notify('success', 'Saved successfully')
