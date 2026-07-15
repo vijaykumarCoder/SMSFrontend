@@ -14,7 +14,7 @@ import { useAppStore } from '../../store/appStore'
 import { apiService } from '../../services/apiService'
 import api from '../../utils/api'
 
-const DEFAULT_ORGANIZATION_ID = localStorage.getItem("DEFAULT_ORGANIZATION_ID")
+const DEFAULT_ORGANIZATION_ID = parseInt(localStorage.getItem("DEFAULT_ORGANIZATION_ID"))
 const DEFAULT_ACADEMIC_YEAR_ID = 1
 const SECTION_OPTIONS = ['A', 'B', 'C', 'D', 'E', 'F']
 const SECTION_ID_BY_LETTER = {
@@ -51,7 +51,7 @@ function normalizeComparable(value) {
 }
 
 function normalizeStudent(record, index = 0) {
-  const id = record?._id ?? record?.id ?? record?.student_id ?? `registered-student-${index}`
+  const id = parseInt(record?._id ?? record?.id ?? record?.student_id ?? `${index}`)
 
   return {
     id,
@@ -391,8 +391,8 @@ export function RegisteredStudentsPage() {
 
     try {
       const payload = {
-        student_register_id: 1,
-        // student_register_id: values.student_register_id,
+        // student_register_id: 1,
+        student_register_id: values.student_register_id,
         student_name: values.student_name.trim(),
         organization_id: DEFAULT_ORGANIZATION_ID,
         class_id: 1,
@@ -406,18 +406,18 @@ export function RegisteredStudentsPage() {
       // const response = await apiService.enrollStudent(payload)
       const response = await api.post('/students/studentEnroll', payload)
 
-      if (response?.status && response.status !== 'success') {
-        throw new Error(response.message || 'student enroll faild')
-      }
+      // if (response?.status && response.status !== 'success') {
+      //   throw new Error(response.message || 'student enroll faild')
+      // }
 
-      if (response?.success === false) {
-        throw new Error(response.message || 'student enroll faild')
-      }
+      // if (response?.success === false) {
+      //   throw new Error(response.message || 'student enroll faild')
+      // }
 
       notify('success', response?.message || 'student enrolled successfully')
       closeEnrollModal()
     } catch (requestError) {
-      notify('error', requestError.message || 'student enroll faild')
+      notify('error', requestError.message || 'student enroll faild & catched')
     }
   }
 
