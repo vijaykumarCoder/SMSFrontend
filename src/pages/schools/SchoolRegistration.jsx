@@ -82,7 +82,7 @@ export function SchoolRegistration() {
             console.log('Payload =>', payload)
 
             const response = await axios.post(
-                'http://127.0.0.1:8000/schools/createSchool',
+                'http://127.0.0.1:8000/organizations/createOrganization',
                 payload,
                 {
                     headers: {
