@@ -8,10 +8,14 @@ import { EmptyState } from '../../components/ui/EmptyState'
 import { Input, Select } from '../../components/ui/Input'
 import { Table } from '../../components/ui/Table'
 import api from '../../utils/api'
+import { fetchClassSectionCatalog, getOrganizationId } from '../../utils/classSections'
 
-const DEFAULT_ORGANIZATION_ID = localStorage.getItem('DEFAULT_ORGANIZATION_ID') || ''
-const GET_STUDENTS_API = `/students/getAllEnrolledStudents/${DEFAULT_ORGANIZATION_ID}`
+const GET_STUDENTS_API = (organizationId) => `/students/getAllEnrolledStudents/${organizationId}`
 const DELETE_STUDENT_API = (studentEnrollId) => `/students/deleteEnrolledStudent/${studentEnrollId}`
+
+function normalizeComparable(value) {
+  return String(value ?? '').trim().toLowerCase()
+}
 
 function readFirstValue(record, keys) {
   for (const key of keys) {
@@ -111,12 +115,17 @@ const columns = [
 
 export function StudentsPage() {
   const [students, setStudents] = useState([])
+  const [catalog, setCatalog] = useState([])
   const [query, setQuery] = useState('')
   const [classFilter, setClassFilter] = useState('All')
+  const [sectionFilter, setSectionFilter] = useState('All')
   const [loading, setLoading] = useState(true)
+  const [catalogLoading, setCatalogLoading] = useState(true)
   const [error, setError] = useState('')
   const [deletingId, setDeletingId] = useState('')
   const [notification, setNotification] = useState(null)
+
+  const organizationId = useMemo(() => getOrganizationId(), [])
 
   useEffect(() => {
     if (!notification) {
@@ -132,7 +141,7 @@ export function StudentsPage() {
   }, [])
 
   const fetchStudents = useCallback(async () => {
-    if (!DEFAULT_ORGANIZATION_ID) {
+    if (!organizationId) {
       setStudents([])
       setError('Organization id is required to load students')
       setLoading(false)
@@ -143,7 +152,7 @@ export function StudentsPage() {
     setError('')
 
     try {
-      const response = await api.get(GET_STUDENTS_API)
+      const response = await api.get(GET_STUDENTS_API(organizationId))
 
       if (response?.data?.status === 'error' || response?.status === 'error') {
         throw new Error(response?.data?.message || response?.message || 'Failed to load students')
@@ -157,17 +166,68 @@ export function StudentsPage() {
     } finally {
       setLoading(false)
     }
-  }, [])
+  }, [organizationId])
+
+  const fetchCatalog = useCallback(async () => {
+    if (!organizationId) {
+      setCatalog([])
+      setCatalogLoading(false)
+      return
+    }
+
+    setCatalogLoading(true)
+
+    try {
+      const rows = await fetchClassSectionCatalog(organizationId)
+      setCatalog(rows)
+    } catch {
+      setCatalog([])
+    } finally {
+      setCatalogLoading(false)
+    }
+  }, [organizationId])
 
   useEffect(() => {
     fetchStudents()
-  }, [fetchStudents])
+    fetchCatalog()
+  }, [fetchCatalog, fetchStudents])
+
+  useEffect(() => {
+    if (classFilter === 'All') {
+      return
+    }
+
+    const selectedClass = catalog.find((item) => normalizeComparable(item.className) === normalizeComparable(classFilter))
+    const availableSections = selectedClass?.sections ?? []
+    const sectionExists = availableSections.some((section) => normalizeComparable(section.sectionName) === normalizeComparable(sectionFilter))
+
+    if (!sectionExists) {
+      setSectionFilter('All')
+    }
+  }, [catalog, classFilter, sectionFilter])
 
   const classOptions = useMemo(() => {
-    return [...new Set(students.map((student) => student.className).filter(Boolean))].sort((left, right) =>
+    return ['All', ...new Set(catalog.map((item) => item.className).filter(Boolean))].sort((left, right) => {
+      if (left === 'All') return -1
+      if (right === 'All') return 1
+      return left.localeCompare(right)
+    })
+  }, [catalog])
+
+  const sectionOptions = useMemo(() => {
+    if (classFilter !== 'All') {
+      const selectedClass = catalog.find((item) => normalizeComparable(item.className) === normalizeComparable(classFilter))
+      const sections = selectedClass?.sections ?? []
+      return ['All', ...sections.map((section) => section.sectionName).filter(Boolean)]
+    }
+
+    const sections = catalog.flatMap((item) => item.sections ?? [])
+    const uniqueSections = [...new Set(sections.map((section) => section.sectionName).filter(Boolean))].sort((left, right) =>
       left.localeCompare(right),
     )
-  }, [students])
+
+    return ['All', ...uniqueSections]
+  }, [catalog, classFilter])
 
   const filteredStudents = useMemo(() => {
     const normalizedQuery = query.trim().toLowerCase()
@@ -179,11 +239,13 @@ export function StudentsPage() {
           .filter(Boolean)
           .some((value) => String(value).toLowerCase().includes(normalizedQuery))
 
-      const matchesClass = classFilter === 'All' || student.className === classFilter
+      const matchesClass = classFilter === 'All' || normalizeComparable(student.className) === normalizeComparable(classFilter)
+      const matchesSection =
+        sectionFilter === 'All' || normalizeComparable(student.section) === normalizeComparable(sectionFilter)
 
-      return matchesQuery && matchesClass
+      return matchesQuery && matchesClass && matchesSection
     })
-  }, [classFilter, query, students])
+  }, [classFilter, query, sectionFilter, students])
 
   const handleDelete = async (student) => {
     const studentEnrollId = student.student_enroll_id ?? student.id
@@ -236,23 +298,35 @@ export function StudentsPage() {
             <p className="text-xs font-semibold uppercase tracking-[0.24em] text-brand-700">Students</p>
             <h1 className="mt-2 text-3xl font-semibold tracking-tight text-slate-900 dark:text-white">Enrolled students</h1>
             <p className="mt-2 max-w-2xl text-sm text-slate-500 dark:text-slate-400">
-              View the live enrolled student list and remove records directly from the backend when needed.
+              View the live enrolled student list and filter by class and section.
             </p>
           </div>
         </div>
 
-        <div className="mt-6 grid gap-4 md:grid-cols-[minmax(0,1fr)_220px]">
+        <div className="mt-6 grid gap-4 md:grid-cols-[minmax(0,1fr)_220px_220px]">
           <Input
             value={query}
             onChange={(event) => setQuery(event.target.value)}
             placeholder="Search by student name, class, section, contact, or status"
             icon={Search}
           />
-          <Select value={classFilter} onChange={(event) => setClassFilter(event.target.value)}>
-            <option>All</option>
+          <Select
+            value={classFilter}
+            onChange={(event) => {
+              setClassFilter(event.target.value)
+              setSectionFilter('All')
+            }}
+          >
             {classOptions.map((className) => (
               <option key={className} value={className}>
-                {className}
+                {className === 'All' ? 'All Classes' : className}
+              </option>
+            ))}
+          </Select>
+          <Select value={sectionFilter} onChange={(event) => setSectionFilter(event.target.value)} disabled={catalogLoading && !catalog.length}>
+            {sectionOptions.map((sectionName) => (
+              <option key={sectionName} value={sectionName}>
+                {sectionName === 'All' ? 'All Sections' : sectionName}
               </option>
             ))}
           </Select>
@@ -280,7 +354,7 @@ export function StudentsPage() {
               emptyState={
                 <EmptyState
                   title="No students found"
-                  description="Try adjusting the search or class filter."
+                  description="Try adjusting the search, class filter, or section filter."
                 />
               }
               renderRowActions={(row) => (

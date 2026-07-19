@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { useForm } from 'react-hook-form'
 import { Edit3, Plus, Trash2 } from 'lucide-react'
+
 import { Button } from '../../components/ui/Button'
 import { Card } from '../../components/ui/Card'
 import { EmptyState } from '../../components/ui/EmptyState'
@@ -8,57 +9,42 @@ import { Input, Select } from '../../components/ui/Input'
 import { Modal } from '../../components/ui/Modal'
 import { Table } from '../../components/ui/Table'
 import api from '../../utils/api'
+import { fetchClassSectionCatalog, getOrganizationId } from '../../utils/classSections'
 
-const DEFAULT_ORGANIZATION_ID = localStorage.getItem("DEFAULT_ORGANIZATION_ID")
-const CLASS_COUNT_API = `http://localhost:8000/classes/totalStudent/${DEFAULT_ORGANIZATION_ID}`
 const CREATE_CLASS_API = 'http://localhost:8000/classes/createClass'
 const UPDATE_CLASS_API = (classId) => `http://localhost:8000/classes/${classId}`
 const DELETE_CLASS_API = (classId) => `http://localhost:8000/classes/${classId}`
-const sectionOptions = ['A', 'B', 'C', 'D', 'E', 'F']
+const SECTION_OPTIONS = ['A', 'B', 'C', 'D', 'E', 'F']
 
-function normalizeSectionName(value) {
+function normalizeSectionValue(value) {
   const rawValue = String(value ?? '').trim()
 
   if (!rawValue) {
-    return ''
+    return 'A'
   }
 
-  return rawValue.replace(/^section\s+/i, '').trim()
+  return rawValue.replace(/^section\s+/i, '').trim() || 'A'
 }
 
-function normalizeSection(section, index = 0) {
-  return {
-    id: section?.section_id ?? section?.id ?? `section-${index}`,
-    sectionId: section?.section_id ?? section?.id ?? null,
-    sectionName: normalizeSectionName(section?.section_name ?? section?.sectionName),
-    classTeacher: String(section?.class_teacher ?? section?.classTeacher ?? '').trim(),
-    classTeacherId: section?.class_teacher_id ?? section?.classTeacherId ?? null,
-    studentsCount: Number(section?.students_count ?? section?.studentsCount ?? 0) || 0,
-  }
-}
-
-function normalizeClass(record, index = 0) {
-  const sections = Array.isArray(record?.sections) ? record.sections.map(normalizeSection) : []
-
-  return {
-    id: record?.class_id ?? record?.id ?? record?.classId ?? `class-${index}`,
-    classId: record?.class_id ?? record?.id ?? record?.classId ?? null,
-    className: String(record?.class_name ?? record?.className ?? '').trim(),
-    totalStudents: Number(record?.total_students ?? record?.totalStudents ?? 0) || 0,
-    sections,
-    raw: record ?? {},
-  }
-}
-
-function getClassTeacherLabel(sections = []) {
+function getSectionTeacherLabel(sections = []) {
   const teachers = [...new Set(sections.map((section) => section.classTeacher).filter(Boolean))]
   return teachers.length ? teachers.join(', ') : 'Not assigned'
 }
 
+function getUniqueSections(classes = [], classFilter = 'All') {
+  const candidateClasses =
+    classFilter === 'All' ? classes : classes.filter((item) => String(item.className) === String(classFilter))
+
+  const sections = candidateClasses.flatMap((item) => item.sections ?? [])
+  const uniqueSections = [...new Map(sections.map((section) => [section.sectionName, section])).values()]
+
+  return uniqueSections.sort((left, right) => left.sectionName.localeCompare(right.sectionName))
+}
+
 export function ClassesPage() {
   const [classes, setClasses] = useState([])
-  const [selectedSections, setSelectedSections] = useState({})
   const [classFilter, setClassFilter] = useState('All')
+  const [sectionFilter, setSectionFilter] = useState('All')
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState('')
   const [modalOpen, setModalOpen] = useState(false)
@@ -67,6 +53,8 @@ export function ClassesPage() {
   const [editingClass, setEditingClass] = useState(null)
   const [notification, setNotification] = useState(null)
   const isMountedRef = useRef(false)
+  const organizationId = getOrganizationId()
+
   const {
     register,
     handleSubmit,
@@ -99,74 +87,61 @@ export function ClassesPage() {
     setError('')
 
     try {
-      const response = await api.get(CLASS_COUNT_API)
-      // const response = {
-      //   "status": "success",
-      //   "message": "Student count fetched successfully",
-      //   "data": [
-      //     {
-      //       "class_id": 48,
-      //       "class_name": "class 12",
-      //       "total_students": 2,
-      //       "sections": [
-      //         {
-      //           "section_id": 32,
-      //           "section_name": "Section A",
-      //           "class_teacher": "Test",
-      //           "class_teacher_id": 1,
-      //           "students_count": 1
-      //         },
-      //         {
-      //           "section_id": 33,
-      //           "section_name": "Section B",
-      //           "class_teacher": "Test 2",
-      //           "class_teacher_id": 2,
-      //           "students_count": 1
-      //         }
-      //       ]
-      //     },
-      //     {
-      //       "class_id": 49,
-      //       "class_name": "class 9",
-      //       "total_students": 10,
-      //       "sections": [
-      //         {
-      //           "section_id": 33,
-      //           "section_name": "A",
-      //           "class_teacher": "Test 3",
-      //           "class_teacher_id": 3,
-      //           "students_count": 10
-      //         }
-      //       ]
-      //     }
-      //   ]
-      // }
-      const nextClasses = (response.data?.data ?? []).map(normalizeClass)
+      const nextClasses = await fetchClassSectionCatalog(organizationId)
 
-      if (!isMountedRef.current) return
+      if (!isMountedRef.current) {
+        return
+      }
 
       setClasses(nextClasses)
-      setSelectedSections((current) => {
-        const nextSelections = { ...current }
-
-        nextClasses.forEach((item) => {
-          if (nextSelections[item.id] == null) {
-            nextSelections[item.id] = 'All'
-          }
-        })
-
-        return nextSelections
-      })
     } catch (fetchError) {
-      if (!isMountedRef.current) return
+      if (!isMountedRef.current) {
+        return
+      }
 
-      setError(fetchError?.response?.data?.message || 'Failed to load classes. Please try again.')
+      setError(fetchError?.response?.data?.message || fetchError?.message || 'Failed to load classes. Please try again.')
     } finally {
       if (isMountedRef.current) {
         setLoading(false)
       }
     }
-  }, [])
+  }, [organizationId])
+
+  useEffect(() => {
+    isMountedRef.current = true
+    fetchClasses()
+
+    return () => {
+      isMountedRef.current = false
+    }
+  }, [fetchClasses])
+
+  useEffect(() => {
+    if (sectionFilter === 'All') {
+      return
+    }
+
+    const sectionOptions = getUniqueSections(classes, classFilter)
+    const sectionExists = sectionOptions.some((section) => section.sectionName === sectionFilter)
+
+    if (!sectionExists) {
+      setSectionFilter('All')
+    }
+  }, [classFilter, classes, sectionFilter])
+
+  const classOptions = useMemo(() => {
+    return ['All', ...new Set(classes.map((item) => item.className).filter(Boolean))].sort((left, right) => {
+      if (left === 'All') return -1
+      if (right === 'All') return 1
+      return left.localeCompare(right)
+    })
+  }, [classes])
+
+  const sectionOptions = useMemo(() => {
+    const options = getUniqueSections(classes, classFilter)
+
+    return ['All', ...options.map((section) => section.sectionName)]
+  }, [classFilter, classes])
 
   const openCreateModal = () => {
     setEditingClass(null)
@@ -183,19 +158,27 @@ export function ClassesPage() {
     clearErrors()
     reset({
       className: row.className,
-      section: row.selectedSection === 'All' ? row.availableSections.find((section) => section !== 'All') ?? 'A' : row.selectedSection,
+      section: normalizeSectionValue(row.primarySection),
     })
     setModalOpen(true)
   }
 
   const onSubmit = async (values) => {
+    if (!organizationId) {
+      setFormError('className', {
+        type: 'server',
+        message: 'Organization id is required to save classes',
+      })
+      notify('error', 'Organization id is required to save classes')
+      return
+    }
+
     setSaving(true)
     setError('')
 
     try {
-       console.log("class_name", values.className, values.className.trim())
       await api.post(CREATE_CLASS_API, {
-        organization_id: DEFAULT_ORGANIZATION_ID,
+        organization_id: organizationId,
         class_name: `Class ${values.className.trim()}`,
         section_name: `Section ${values.section}`,
       })
@@ -281,70 +264,30 @@ export function ClassesPage() {
     }
   }
 
-  useEffect(() => {
-    isMountedRef.current = true
-    fetchClasses()
-
-    return () => {
-      isMountedRef.current = false
-    }
-  }, [fetchClasses])
-
-  const classNames = useMemo(() => {
-    return [...new Set(classes.map((item) => item.className))].sort((left, right) => left.localeCompare(right))
-  }, [classes])
-
-  const totalStudents = useMemo(() => classes.reduce((sum, item) => sum + item.totalStudents, 0), [classes])
-
   const rows = useMemo(() => {
     return classes
-      .map((item) => {
-        const selectedSection = selectedSections[item.id] ?? 'All'
-        const sectionDetails = item.sections?.find((section) => section.sectionName === normalizeSectionName(selectedSection))
-        const studentCount = selectedSection === 'All' ? item.totalStudents : sectionDetails?.studentsCount ?? 0
-        const availableSections = ['All', ...(item.sections ?? []).map((section) => section.sectionName).filter(Boolean)]
-
-        return {
-          id: item.id,
-          classId: item.classId,
-          className: item.className,
-          classTeacher: getClassTeacherLabel(item.sections),
-          studentCount,
-          availableSections,
-          selectedSection,
-        }
-      })
       .filter((item) => classFilter === 'All' || item.className === classFilter)
+      .filter((item) => {
+        if (sectionFilter === 'All') {
+          return true
+        }
+
+        return (item.sections ?? []).some((section) => section.sectionName === sectionFilter)
+      })
+      .map((item) => ({
+        id: item.id,
+        classId: item.classId,
+        className: item.className,
+        classTeacher: getSectionTeacherLabel(item.sections),
+        primarySection: item.sections?.[0]?.sectionName ?? '',
+      }))
       .sort((left, right) => left.className.localeCompare(right.className))
-  }, [classFilter, classes, selectedSections])
+  }, [classFilter, classes, sectionFilter])
 
   const columns = useMemo(
     () => [
       { key: 'className', label: 'Class Name' },
       { key: 'classTeacher', label: 'Class Teacher' },
-      { key: 'studentCount', label: 'Students Count' },
-      {
-        key: 'selectedSection',
-        label: 'Section',
-        render: (row) => (
-          <Select
-            value={row.selectedSection}
-            onChange={(event) =>
-              setSelectedSections((current) => ({
-                ...current,
-                [row.id]: event.target.value,
-              }))
-            }
-            className="min-w-[132px]"
-          >
-            {row.availableSections.map((section) => (
-              <option key={section} value={section}>
-                {section === 'All' ? 'All Sections' : `Section ${section}`}
-              </option>
-            ))}
-          </Select>
-        ),
-      },
     ],
     [],
   )
@@ -370,7 +313,7 @@ export function ClassesPage() {
           <div>
             <h1 className="text-3xl font-semibold tracking-tight text-slate-900 dark:text-white">Classes</h1>
             <p className="mt-2 text-sm text-slate-500 dark:text-slate-400">
-              View each class, its teachers, sections, and live student counts from the backend.
+              View each class, its teachers, and the sections returned by the backend.
             </p>
           </div>
           <Button variant="brand" onClick={openCreateModal}>
@@ -379,21 +322,28 @@ export function ClassesPage() {
           </Button>
         </div>
 
-        <div className="mt-6 grid gap-4 md:grid-cols-[220px_auto]">
-          <Select value={classFilter} onChange={(event) => setClassFilter(event.target.value)} label="Filter By Class">
-            <option value="All">All Classes</option>
-            {classNames.map((className) => (
+        <div className="mt-6 grid gap-4 md:grid-cols-[220px_220px]">
+          <Select
+            value={classFilter}
+            onChange={(event) => {
+              setClassFilter(event.target.value)
+              setSectionFilter('All')
+            }}
+            label="Filter By Class"
+          >
+            {classOptions.map((className) => (
               <option key={className} value={className}>
-                {className}
+                {className === 'All' ? 'All Classes' : className}
               </option>
             ))}
           </Select>
-          <div className="flex items-center rounded-2xl border border-slate-200 bg-slate-50 px-4 text-sm text-slate-500 dark:border-slate-800 dark:bg-slate-900 dark:text-slate-400">
-            <div>
-              <p className="text-xs font-semibold uppercase tracking-[0.18em] text-slate-400 dark:text-slate-500">Total students</p>
-              <p className="mt-1 text-lg font-semibold text-slate-900 dark:text-white">{totalStudents}</p>
-            </div>
-          </div>
+          <Select value={sectionFilter} onChange={(event) => setSectionFilter(event.target.value)} label="Filter By Section">
+            {sectionOptions.map((sectionName) => (
+              <option key={sectionName} value={sectionName}>
+                {sectionName === 'All' ? 'All Sections' : sectionName}
+              </option>
+            ))}
+          </Select>
         </div>
 
         <div className="mt-6">
@@ -460,13 +410,14 @@ export function ClassesPage() {
             label="Class Name"
             placeholder="Enter class name"
             error={errors.className?.message}
+            type='number'
             {...register('className', {
               required: 'Class name is required',
               validate: (value) => value.trim().length > 0 || 'Class name is required',
             })}
           />
           <Select label="Section" error={errors.section?.message} {...register('section', { required: 'Section is required' })}>
-            {sectionOptions.map((section) => (
+            {SECTION_OPTIONS.map((section) => (
               <option key={section} value={section}>
                 Section {section}
               </option>
