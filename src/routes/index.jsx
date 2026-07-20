@@ -16,6 +16,7 @@ import { MarkAttendancePage } from '../pages/attendance/MarkAttendancePage'
 import { LoginPage } from '../pages/auth/LoginPage'
 import { SignupPage } from '../pages/auth/SignupPage'
 import { SettingsPage } from '../pages/settings/SettingsPage'
+import { StudentLeaveApplicationPage } from '../pages/students/StudentLeaveApplicationPage'
 import { StudentsPage } from '../pages/students/StudentsPage'
 import { StudentRegistration } from '../pages/students/StudentRegistration'
 import { RegisteredStudentsPage } from '../pages/students/RegisteredStudentsPage'
@@ -69,6 +70,7 @@ export function AppRouter() {
           <Route path="/registered-students" element={<RegisteredStudentsPage />} />
           {/* <Route path="/students"       element={<Navigate to="/registered-students" replace />} /> */}
           <Route path="/teachers"       element={<TeachersPage />} />
+          <Route path="/student-leave-application" element={<StudentLeaveApplicationPage />} />
           <Route path="/attendance"     element={<AttendancePage />} />
           <Route path="/mark-attendance" element={<MarkAttendancePage />} />
           <Route path="/exams"          element={<ExamsPage />} />
