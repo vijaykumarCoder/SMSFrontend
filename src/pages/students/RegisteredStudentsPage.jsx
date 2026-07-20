@@ -10,21 +10,13 @@ import { EmptyState } from '../../components/ui/EmptyState'
 import { Input, Select } from '../../components/ui/Input'
 import { Modal } from '../../components/ui/Modal'
 import { Table } from '../../components/ui/Table'
-import { useAppStore } from '../../store/appStore'
 import { apiService } from '../../services/apiService'
 import api from '../../utils/api'
+import { fetchClassSectionCatalog, getOrganizationId } from '../../utils/classSections'
 
-const DEFAULT_ORGANIZATION_ID = parseInt(localStorage.getItem("DEFAULT_ORGANIZATION_ID"))
+const DEFAULT_ORGANIZATION_ID = getOrganizationId()
 const DEFAULT_ACADEMIC_YEAR_ID = 1
-const SECTION_OPTIONS = ['A', 'B', 'C', 'D', 'E', 'F']
-const SECTION_ID_BY_LETTER = {
-  A: 1,
-  B: 2,
-  C: 3,
-  D: 4,
-  E: 5,
-  F: 6,
-}
+const DEFAULT_SECTION_NAME = 'A'
 
 const formDefaults = {
   student_name: '',
@@ -48,6 +40,13 @@ function readFirstValue(record, keys) {
 
 function normalizeComparable(value) {
   return String(value ?? '').trim().toLowerCase()
+}
+
+function normalizeSectionName(value) {
+  return String(value ?? '')
+    .trim()
+    .replace(/^section\s+/i, '')
+    .trim()
 }
 
 function normalizeStudent(record, index = 0) {
@@ -94,71 +93,36 @@ function extractStudentRows(response) {
   return []
 }
 
-function buildClassOptions(classes = []) {
-  const groupedClasses = classes.reduce((accumulator, record) => {
-    const className = String(readFirstValue(record, ['class_name', 'className']) ?? '').trim()
-
-    if (!className) {
-      return accumulator
-    }
-
-    if (!accumulator.has(className)) {
-      accumulator.set(className, [])
-    }
-
-    accumulator.get(className).push(record)
-    return accumulator
-  }, new Map())
-
-  return [...groupedClasses.entries()]
-    .map(([className, records]) => {
-      const sortedRecords = [...records].sort((left, right) => {
-        const leftSection = normalizeComparable(readFirstValue(left, ['section', 'section_name', 'sectionName']))
-        const rightSection = normalizeComparable(readFirstValue(right, ['section', 'section_name', 'sectionName']))
-        return leftSection.localeCompare(rightSection)
-      })
-
-      return {
-        className,
-        value: sortedRecords[0]?.id ?? sortedRecords[0]?.class_id ?? className,
-        records: sortedRecords,
-      }
-    })
-    .sort((left, right) => left.className.localeCompare(right.className))
-}
-
-function resolveClassValue(student, classOptions) {
-  const normalizedClassName = normalizeComparable(student?.class_name)
-
-  if (!normalizedClassName) {
-    return classOptions[0]?.value ?? ''
+function normalizeCatalogClass(record) {
+  return {
+    classId: record?.classId ?? record?.class_id ?? record?.id ?? '',
+    className: String(record?.className ?? record?.class_name ?? '').trim(),
+    sections: Array.isArray(record?.sections) ? record.sections : [],
   }
-
-  const matchedClass = classOptions.find((item) => normalizeComparable(item.className) === normalizedClassName)
-
-  if (!matchedClass) {
-    return classOptions[0]?.value ?? ''
-  }
-
-  const normalizedSection = normalizeComparable(student?.section)
-  const exactMatch = matchedClass.records.find(
-    (record) => normalizeComparable(readFirstValue(record, ['section', 'section_name', 'sectionName'])) === normalizedSection,
-  )
-
-  return exactMatch?.id ?? exactMatch?.class_id ?? matchedClass.value
 }
 
-function resolveSectionValue(student) {
-  const normalizedSection = normalizeComparable(student?.section).toUpperCase()
-  return SECTION_ID_BY_LETTER[normalizedSection] ?? SECTION_ID_BY_LETTER.A
+function resolveClassValue(student, catalog) {
+  const matchedClass = catalog.find((item) => normalizeComparable(item.className) === normalizeComparable(student?.class_name))
+  return matchedClass?.classId ?? ''
 }
 
-function buildEnrollDefaults(student, classOptions) {
+function resolveSectionValue(catalog, className) {
+  const matchedClass = catalog.find((item) => normalizeComparable(item.className) === normalizeComparable(className))
+  const sections = matchedClass?.sections ?? []
+  const defaultSection =
+    sections.find((section) => normalizeSectionName(section?.sectionName ?? section?.section_name) === DEFAULT_SECTION_NAME) ??
+    sections[0] ??
+    null
+
+  return defaultSection?.sectionId ?? defaultSection?.section_id ?? ''
+}
+
+function buildEnrollDefaults(student, catalog) {
   return {
     student_register_id: student?.id ?? '',
     student_name: student?.student_name ?? '',
-    class_id: String(resolveClassValue(student, classOptions) ?? ''),
-    section_id: String(resolveSectionValue(student) ?? ''),
+    class_id: String(resolveClassValue(student, catalog) ?? ''),
+    section_id: String(resolveSectionValue(catalog, student?.class_name) ?? ''),
     admission_no: '',
     roll_no: '',
   }
@@ -216,10 +180,11 @@ const columns = [
 
 export function RegisteredStudentsPage() {
   const navigate = useNavigate()
-  const classes = useAppStore((state) => state.classes)
   const [students, setStudents] = useState([])
+  const [catalog, setCatalog] = useState([])
   const [query, setQuery] = useState('')
   const [loading, setLoading] = useState(true)
+  const [catalogLoading, setCatalogLoading] = useState(true)
   const [error, setError] = useState('')
   const [savingId, setSavingId] = useState('')
   const [deletingId, setDeletingId] = useState('')
@@ -228,7 +193,8 @@ export function RegisteredStudentsPage() {
   const [editingStudent, setEditingStudent] = useState(null)
   const [enrollingStudent, setEnrollingStudent] = useState(null)
   const [notification, setNotification] = useState(null)
-  const classOptions = useMemo(() => buildClassOptions(classes), [classes])
+  const organizationId = useMemo(() => getOrganizationId(), [])
+  const classOptions = useMemo(() => catalog, [catalog])
 
   const {
     register: editRegister,
@@ -244,6 +210,8 @@ export function RegisteredStudentsPage() {
     handleSubmit: handleEnrollSubmit,
     reset: resetEnrollForm,
     register: enrollRegister,
+    setValue: setEnrollValue,
+    watch: enrollWatch,
     formState: { errors: enrollErrors, isSubmitting: isEnrolling },
   } = useForm({
     defaultValues: {
@@ -305,6 +273,45 @@ export function RegisteredStudentsPage() {
     }
   }, [])
 
+  useEffect(() => {
+    let active = true
+
+    async function loadCatalog() {
+      if (!organizationId) {
+        if (active) {
+          setCatalog([])
+          setCatalogLoading(false)
+        }
+        return
+      }
+
+      setCatalogLoading(true)
+
+      try {
+        const rows = await fetchClassSectionCatalog(organizationId)
+        if (!active) {
+          return
+        }
+
+        setCatalog(rows.map(normalizeCatalogClass))
+      } catch {
+        if (active) {
+          setCatalog([])
+        }
+      } finally {
+        if (active) {
+          setCatalogLoading(false)
+        }
+      }
+    }
+
+    loadCatalog()
+
+    return () => {
+      active = false
+    }
+  }, [organizationId])
+
   const filteredStudents = useMemo(() => {
     const normalizedQuery = query.trim().toLowerCase()
 
@@ -314,6 +321,13 @@ export function RegisteredStudentsPage() {
 
     return students.filter((student) => student.student_name.toLowerCase().includes(normalizedQuery))
   }, [query, students])
+
+  const selectedEnrollClassId = enrollWatch('class_id')
+  const selectedEnrollClass = useMemo(
+    () => classOptions.find((item) => String(item.classId) === String(selectedEnrollClassId)) ?? null,
+    [classOptions, selectedEnrollClassId],
+  )
+  const enrollSectionOptions = useMemo(() => selectedEnrollClass?.sections ?? [], [selectedEnrollClass])
 
   const notify = (type, message) => {
     setNotification({ type, message })
@@ -340,7 +354,7 @@ export function RegisteredStudentsPage() {
     setModalOpen(false)
     setEditingStudent(null)
     setEnrollingStudent(student)
-    resetEnrollForm(buildEnrollDefaults(student, classOptions))
+    resetEnrollForm(buildEnrollDefaults(student, catalog))
     setEnrollModalOpen(true)
   }
 
@@ -391,11 +405,10 @@ export function RegisteredStudentsPage() {
 
     try {
       const payload = {
-        // student_register_id: 1,
         student_register_id: values.student_register_id,
         student_name: values.student_name.trim(),
-        organization_id: DEFAULT_ORGANIZATION_ID,
-        class_id: 1,
+        organization_id: organizationId || DEFAULT_ORGANIZATION_ID,
+        class_id: toNumberIfNumeric(values.class_id),
         section_id: toNumberIfNumeric(values.section_id),
         academic_year_id: DEFAULT_ACADEMIC_YEAR_ID,
         admission_no: values.admission_no.trim(),
@@ -665,15 +678,28 @@ export function RegisteredStudentsPage() {
               <Select
                 label="Class"
                 error={enrollErrors.class_id?.message}
-                disabled={!classOptions.length}
+                disabled={!classOptions.length || catalogLoading}
                 name={field.name}
                 value={field.value}
-                onChange={(event) => field.onChange(event.target.value)}
+                onChange={(event) => {
+                  const nextClassId = event.target.value
+                  field.onChange(nextClassId)
+
+                  const nextClass = classOptions.find((item) => String(item.classId) === String(nextClassId))
+                  const defaultSection =
+                    nextClass?.sections?.find(
+                      (section) => normalizeSectionName(section?.sectionName ?? section?.section_name) === DEFAULT_SECTION_NAME,
+                    ) ?? nextClass?.sections?.[0] ?? null
+
+                  setEnrollValue('section_id', String(defaultSection?.sectionId ?? defaultSection?.section_id ?? ''), {
+                    shouldValidate: true,
+                  })
+                }}
                 onBlur={field.onBlur}
               >
                 <option value="">Select class</option>
                 {classOptions.map((classOption) => (
-                  <option key={classOption.value} value={String(classOption.value)}>
+                  <option key={classOption.classId} value={String(classOption.classId)}>
                     {classOption.className}
                   </option>
                 ))}
@@ -692,10 +718,12 @@ export function RegisteredStudentsPage() {
                 value={field.value}
                 onChange={(event) => field.onChange(event.target.value)}
                 onBlur={field.onBlur}
+                disabled={!selectedEnrollClass}
               >
-                {SECTION_OPTIONS.map((section) => (
-                  <option key={section} value={String(SECTION_ID_BY_LETTER[section])}>
-                    Section {section}
+                <option value="">Select section</option>
+                {enrollSectionOptions.map((section) => (
+                  <option key={section.sectionId ?? section.section_id} value={String(section.sectionId ?? section.section_id)}>
+                    {section.sectionName ?? section.section_name}
                   </option>
                 ))}
               </Select>
@@ -724,7 +752,7 @@ export function RegisteredStudentsPage() {
             <Button type="button" variant="secondary" onClick={closeEnrollModal}>
               Cancel
             </Button>
-            <Button type="submit" variant="brand" disabled={isEnrolling || !classOptions.length}>
+            <Button type="submit" variant="brand" disabled={isEnrolling || catalogLoading || !classOptions.length}>
               {isEnrolling ? 'Submitting...' : 'Enroll Student'}
             </Button>
           </div>
