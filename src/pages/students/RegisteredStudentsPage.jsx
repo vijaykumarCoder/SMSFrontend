@@ -38,6 +38,20 @@ function readFirstValue(record, keys) {
   return keys.reduce((value, key) => value || record?.[key], '')
 }
 
+function resolveStudentRegisterId(record, index = 0) {
+  return (
+    readFirstValue(record, [
+      'student_register_id',
+      'studentRegisterId',
+      'student_registerId',
+      'student_id',
+      'studentId',
+      '_id',
+      'id',
+    ]) || `student-${index}`
+  )
+}
+
 function normalizeComparable(value) {
   return String(value ?? '').trim().toLowerCase()
 }
@@ -50,10 +64,11 @@ function normalizeSectionName(value) {
 }
 
 function normalizeStudent(record, index = 0) {
-  const id = parseInt(record?._id ?? record?.id ?? record?.student_id ?? `${index}`)
+  const studentRegisterId = resolveStudentRegisterId(record, index)
 
   return {
-    id,
+    id: studentRegisterId,
+    student_register_id: studentRegisterId,
     student_name: readFirstValue(record, ['student_name', 'full_name', 'name', 'studentName']),
     class_name: readFirstValue(record, ['class_name', 'className', 'class']),
     father_name: readFirstValue(record, ['father_name', 'fatherName']),
@@ -119,7 +134,7 @@ function resolveSectionValue(catalog, className) {
 
 function buildEnrollDefaults(student, catalog) {
   return {
-    student_register_id: student?.id ?? '',
+    student_register_id: student?.student_register_id ?? student?.id ?? '',
     student_name: student?.student_name ?? '',
     class_id: String(resolveClassValue(student, catalog) ?? ''),
     section_id: String(resolveSectionValue(catalog, student?.class_name) ?? ''),
@@ -142,7 +157,7 @@ function toNumberIfNumeric(value) {
 function toPayload(values) {
   return {
     ...values,
-    organization_id: DEFAULT_ORGANIZATION_ID,
+    organization_id: parseInt(DEFAULT_ORGANIZATION_ID),
     how_do_you_get_to_know: values.how_do_you_get_to_know || 'Through application',
   }
 }
@@ -154,7 +169,9 @@ const columns = [
     render: (row) => (
       <div>
         <p className="font-medium text-slate-900 dark:text-white">{row.student_name || 'Unnamed student'}</p>
-        <p className="text-xs text-slate-500 dark:text-slate-400">ID: {row.id}</p>
+        <p className="text-xs text-slate-500 dark:text-slate-400">
+          Register ID: {row.student_register_id ?? row.id}
+        </p>
       </div>
     ),
   },
@@ -405,9 +422,9 @@ export function RegisteredStudentsPage() {
 
     try {
       const payload = {
-        student_register_id: values.student_register_id,
+        student_register_id: toNumberIfNumeric(values.student_register_id),
         student_name: values.student_name.trim(),
-        organization_id: organizationId || DEFAULT_ORGANIZATION_ID,
+        organization_id: parseInt(organizationId) || DEFAULT_ORGANIZATION_ID,
         class_id: toNumberIfNumeric(values.class_id),
         section_id: toNumberIfNumeric(values.section_id),
         academic_year_id: DEFAULT_ACADEMIC_YEAR_ID,
@@ -475,9 +492,9 @@ export function RegisteredStudentsPage() {
             <h1 className="mt-2 text-3xl font-semibold tracking-tight text-slate-900 dark:text-white">
               Registered students
             </h1>
-            <p className="mt-2 max-w-2xl text-sm text-slate-500 dark:text-slate-400">
+            {/* <p className="mt-2 max-w-2xl text-sm text-slate-500 dark:text-slate-400">
               Browse the live registration list, search by student name, and keep records updated from one place.
-            </p>
+            </p> */}
           </div>
 
           <Button variant="brand" onClick={() => navigate('/student-registration')}>
