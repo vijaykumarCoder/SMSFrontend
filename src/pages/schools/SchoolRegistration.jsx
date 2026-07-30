@@ -54,7 +54,7 @@ export function SchoolRegistration() {
         formState: { errors, isSubmitting },
     } = useForm({
         defaultValues: {
-            school_name: '',
+            organization_name: '',
             registration_code: '',
             email: '',
             phone: '',
@@ -68,8 +68,8 @@ export function SchoolRegistration() {
     const onSubmit = async (data) => {
         try {
             const payload = {
-                school_name: data.school_name.trim(),
-                school_code: data.registration_code.trim(),
+                organization_name: data.organization_name.trim(),
+                organization_code: data.registration_code.trim(),
                 email: data.email.trim().toLowerCase(),
                 phone: data.phone.trim(),
                 state: data.state.trim(),
@@ -189,8 +189,8 @@ export function SchoolRegistration() {
                             <Input
                                 label="School Name"
                                 icon={Building2}
-                                error={errors.school_name?.message}
-                                {...register('school_name', {
+                                error={errors.organization_name?.message}
+                                {...register('organization_name', {
                                     required: 'School name is required',
                                 })}
                             />
