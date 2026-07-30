@@ -75,7 +75,7 @@ export function SchoolRegistration() {
                 state: data.state.trim(),
                 city: data.city.trim(),
                 zipcode: data.zipcode.trim(),
-                school_address: data.address.trim(),
+                organization_address: data.address.trim(),
             }
 
 
