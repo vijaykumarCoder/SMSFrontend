@@ -13,7 +13,7 @@ import { fetchClassSectionCatalog, getOrganizationId } from '../../utils/classSe
 
 const CREATE_CLASS_API = 'http://localhost:8000/classes/createClass'
 const UPDATE_CLASS_API = (classId) => `http://localhost:8000/classes/${classId}`
-const DELETE_CLASS_API = (classId) => `http://localhost:8000/classes/${classId}`
+const DELETE_CLASS_API = (classId) => `/classes/deleteClass/${classId}`
 const SECTION_OPTIONS = ['A', 'B', 'C', 'D', 'E', 'F']
 
 function normalizeSectionValue(value) {
@@ -24,6 +24,10 @@ function normalizeSectionValue(value) {
   }
 
   return rawValue.replace(/^section\s+/i, '').trim() || 'A'
+}
+
+function getApiMessage(payload, fallback = '') {
+  return payload?.data?.message || payload?.message || payload?.response?.data?.message || payload?.response?.message || fallback
 }
 
 function getSectionTeacherLabel(sections = []) {
@@ -177,13 +181,13 @@ export function ClassesPage() {
     setError('')
 
     try {
-      await api.post(CREATE_CLASS_API, {
+      const response = await api.post(CREATE_CLASS_API, {
         organization_id: organizationId,
         class_name: `Class ${values.className.trim()}`,
         section_name: `Section ${values.section}`,
       })
 
-      notify('success', 'Saved successfully')
+      notify('success', getApiMessage(response, 'Saved successfully'))
       setModalOpen(false)
       setEditingClass(null)
       reset({
@@ -219,12 +223,12 @@ export function ClassesPage() {
     setError('')
 
     try {
-      await api.put(UPDATE_CLASS_API(editingClass.classId), {
+      const response = await api.put(UPDATE_CLASS_API(editingClass.classId), {
         class_name: values.className.trim(),
         section_name: values.section,
       })
 
-      notify('success', 'Saved successfully')
+      notify('success', getApiMessage(response, 'Saved successfully'))
       setModalOpen(false)
       setEditingClass(null)
       reset({
@@ -254,11 +258,11 @@ export function ClassesPage() {
     setError('')
 
     try {
-      await api.delete(DELETE_CLASS_API(row.classId))
-      notify('success', 'Deleted successfully')
+      const response = await api.delete(DELETE_CLASS_API(row.classId))
+      notify('success', getApiMessage(response, 'Deleted successfully'))
       await fetchClasses()
     } catch (deleteError) {
-      notify('error', deleteError?.response?.data?.message || 'Failed to delete class')
+      notify('error', getApiMessage(deleteError, 'Failed to delete class'))
     } finally {
       setDeletingId('')
     }

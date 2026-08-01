@@ -73,6 +73,7 @@ function normalizeStudent(record, index = 0) {
     class_name: readFirstValue(record, ['class_name', 'className', 'class']),
     father_name: readFirstValue(record, ['father_name', 'fatherName']),
     father_phone_number: readFirstValue(record, ['father_phone_number', 'phone_number', 'phone', 'contact']),
+    phone_number: readFirstValue(record, ['phone_number', 'phoneNumber', 'father_phone_number', 'phone', 'contact']),
     emergency_name: readFirstValue(record, ['emergency_name', 'emergency_contact_name']),
     emergency_phone_number: readFirstValue(record, ['emergency_phone_number', 'emergency_contact_phone']),
     date_of_birth: readFirstValue(record, ['date_of_birth', 'dob']),
@@ -140,6 +141,7 @@ function buildEnrollDefaults(student, catalog) {
     section_id: String(resolveSectionValue(catalog, student?.class_name) ?? ''),
     admission_no: '',
     roll_no: '',
+    phone_number: String(student?.phone_number ?? student?.father_phone_number ?? student?.contact ?? '').trim(),
   }
 }
 
@@ -238,6 +240,7 @@ export function RegisteredStudentsPage() {
       section_id: '',
       admission_no: '',
       roll_no: '',
+      phone_number: '',
     },
   })
 
@@ -433,6 +436,7 @@ export function RegisteredStudentsPage() {
         section_id: toNumberIfNumeric(values.section_id),
         academic_year_id: DEFAULT_ACADEMIC_YEAR_ID,
         admission_no: values.admission_no.trim(),
+        phone_number: values.phone_number.trim(),
         roll_no: values.roll_no.trim(),
         status: 'Active',
       }
@@ -750,6 +754,15 @@ export function RegisteredStudentsPage() {
                 ))}
               </Select>
             )}
+          />
+          <Input
+            label="Phone Number"
+            placeholder="Enter phone number"
+            error={enrollErrors.phone_number?.message}
+            {...enrollRegister('phone_number', {
+              required: 'Phone number is required',
+              validate: (value) => value.trim().length > 0 || 'Phone number is required',
+            })}
           />
           <Input
             label="Admission Number"
