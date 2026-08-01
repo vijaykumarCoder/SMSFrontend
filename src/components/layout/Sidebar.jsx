@@ -9,6 +9,7 @@ export function Sidebar({ collapsed }) {
   const mobileSidebarOpen = useAppStore((state) => state.mobileSidebarOpen)
   const closeMobileSidebar = useAppStore((state) => state.closeMobileSidebar)
   const desktopCollapsed = collapsed
+  const organizationName = typeof window === 'undefined' ? '' : window.localStorage.getItem('DEFAULT_ORGANIZATION_NAME')
 
   return (
     <>
@@ -36,8 +37,8 @@ export function Sidebar({ collapsed }) {
             </div>
             {!desktopCollapsed ? (
               <div>
-                <p className="text-xl font-semibold tracking-tight">Akademi</p>
-                <p className="text-xs text-white/60">School OS Console</p>
+                <p className="truncate text-xl font-semibold tracking-tight">{organizationName || 'Organization'}</p>
+                {/* <p className="text-xs text-white/60">School OS Console</p> */}
               </div>
             ) : null}
           </div>

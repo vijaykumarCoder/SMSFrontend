@@ -1,15 +1,76 @@
-import { ArrowRight, Check, ChevronLeft, Fingerprint, LockKeyhole, Mail, Phone, User } from 'lucide-react'
+import { useState } from 'react'
+import { ArrowRight, Building2, ChevronLeft, Fingerprint, LoaderCircle, LockKeyhole, Mail, ShieldCheck, User } from 'lucide-react'
 import { Link, useNavigate } from 'react-router-dom'
 import { Button } from '../../components/ui/Button'
-import { Input } from '../../components/ui/Input'
+import { Input, Select } from '../../components/ui/Input'
+import api from '../../utils/api'
 import { AuthShowcase } from './AuthShowcase'
+
+const PASSWORD_REQUIREMENTS_MESSAGE =
+  'Password must be at least 8 characters and include letters, a number, and a special character.'
+
+function isStrongPassword(value) {
+  return value.length >= 8 && /[A-Za-z]/.test(value) && /\d/.test(value) && /[^A-Za-z0-9]/.test(value)
+}
 
 export function SignupPage() {
   const navigate = useNavigate()
+  const [formData, setFormData] = useState({
+    name: '',
+    email: '',
+    password: '',
+    confirmPassword: '',
+    role: 'principal',
+    organization_id: '',
+  })
+  const [error, setError] = useState('')
+  const [success, setSuccess] = useState('')
+  const [isSubmitting, setIsSubmitting] = useState(false)
 
-  const handleSubmit = (event) => {
+  const handleChange = (event) => {
+    const { name, value } = event.target
+    setFormData((current) => ({ ...current, [name]: value }))
+  }
+
+  const handleSubmit = async (event) => {
     event.preventDefault()
-    navigate('/dashboard')
+    setError('')
+    setSuccess('')
+
+    if (!isStrongPassword(formData.password)) {
+      setError(PASSWORD_REQUIREMENTS_MESSAGE)
+      return
+    }
+
+    if (formData.password !== formData.confirmPassword) {
+      setError('Passwords do not match.')
+      return
+    }
+
+    setIsSubmitting(true)
+
+    try {
+      await api.post('/users/create/', {
+        name: formData.name.trim(),
+        email: formData.email.trim(),
+        password: formData.password,
+        role: formData.role,
+        organization_id: Number(formData.organization_id),
+      })
+
+      setSuccess('Account created successfully. Redirecting to sign in...')
+      window.setTimeout(() => navigate('/login', { replace: true }), 900)
+    } catch (err) {
+      const message =
+        err.response?.data?.message ||
+        err.response?.data?.detail ||
+        err.response?.data?.error?.message ||
+        'Unable to create account. Please check the details and try again.'
+
+      setError(message)
+    } finally {
+      setIsSubmitting(false)
+    }
   }
 
   return (
@@ -47,27 +108,90 @@ export function SignupPage() {
               school account
             </h1>
             <p className="mt-3 text-sm leading-6 text-slate-500">
-              Set up your workspace to manage students, teachers, schedules, reports, and campus communication in one place.
+              Create a principal account for your organization and start managing school operations securely.
             </p>
 
             <form className="mt-6 space-y-4" onSubmit={handleSubmit}>
-              <Input type="text" icon={User} placeholder="Full name" defaultValue="Stanley Morgan" />
-              <Input type="email" icon={Mail} placeholder="School email" defaultValue="stanley@gmail.com" />
-              <Input type="tel" icon={Phone} placeholder="Phone number" defaultValue="+91 98765 43210" />
-              <Input type="password" icon={LockKeyhole} placeholder="Create password" defaultValue="password12345" />
-              <Input type="password" icon={LockKeyhole} placeholder="Confirm password" defaultValue="password12345" />
+              <Input
+                type="text"
+                name="name"
+                icon={User}
+                placeholder="Full name"
+                value={formData.name}
+                onChange={handleChange}
+                autoComplete="name"
+                required
+              />
+              <Input
+                type="email"
+                name="email"
+                icon={Mail}
+                placeholder="Email address"
+                value={formData.email}
+                onChange={handleChange}
+                autoComplete="email"
+                required
+              />
+              <Input
+                type="password"
+                name="password"
+                icon={LockKeyhole}
+                placeholder="Create password"
+                value={formData.password}
+                onChange={handleChange}
+                autoComplete="new-password"
+                required
+              />
+              <Input
+                type="password"
+                name="confirmPassword"
+                icon={LockKeyhole}
+                placeholder="Confirm password"
+                value={formData.confirmPassword}
+                onChange={handleChange}
+                autoComplete="new-password"
+                required
+              />
+              <Select
+                name="role"
+                value={formData.role}
+                onChange={handleChange}
+                className="rounded-2xl border-slate-200 shadow-sm"
+                required
+              >
+                <option value="principal">Principal</option>
+                <option value="teacher">Teacher</option>
+                <option value="student">Student</option>
+                <option value="admin">Admin</option>
+              </Select>
+              <Input
+                type="number"
+                name="organization_id"
+                icon={Building2}
+                placeholder="Organization ID"
+                value={formData.organization_id}
+                onChange={handleChange}
+                min="1"
+                required
+              />
 
-              <label className="inline-flex items-start gap-3 text-sm text-slate-500">
-                <span className="relative mt-0.5 flex h-5 w-5 items-center justify-center overflow-hidden rounded-md bg-brand-600 text-white shadow-sm shadow-brand-500/30">
-                  <input type="checkbox" defaultChecked className="peer absolute inset-0 cursor-pointer opacity-0" />
-                  <Check size={14} className="pointer-events-none" />
-                </span>
-                I agree to the terms of service and privacy policy for secure school access.
-              </label>
+              {error ? <p className="text-sm font-medium text-rose-500">{error}</p> : null}
+              {success ? (
+                <p className="inline-flex items-center gap-2 text-sm font-medium text-emerald-600">
+                  <ShieldCheck size={16} />
+                  {success}
+                </p>
+              ) : null}
 
-              <Button type="submit" variant="brand" className="mt-2 h-12 w-full rounded-2xl px-8">
-                Create Account
-                <ArrowRight size={16} />
+              <Button
+                type="submit"
+                variant="brand"
+                className="mt-2 h-12 w-full rounded-2xl px-8"
+                disabled={isSubmitting}
+              >
+                {isSubmitting ? <LoaderCircle size={16} className="animate-spin" /> : null}
+                {isSubmitting ? 'Creating Account' : 'Create Account'}
+                {!isSubmitting ? <ArrowRight size={16} /> : null}
               </Button>
             </form>
 
