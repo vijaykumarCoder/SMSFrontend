@@ -1,4 +1,5 @@
 import { ArrowUpRight, BusFront, Clock3, GraduationCap, Users } from 'lucide-react'
+import { useCallback, useEffect, useMemo, useState } from 'react'
 import { useAppStore } from '../../store/appStore'
 import { useInitialLoading } from '../../hooks/useInitialLoading'
 import { overviewData, performanceData, statCards } from '../../utils/mockData'
@@ -6,10 +7,86 @@ import { BarChartCard, LineChartCard } from '../../components/ui/ChartCard'
 import { Card } from '../../components/ui/Card'
 import { Skeleton } from '../../components/ui/Skeleton'
 import { StatCard } from '../../components/ui/StatCard'
+import api from '../../utils/api'
+import { getOrganizationId } from '../../utils/classSections'
+
+const DASHBOARD_API = (organizationId) => `/dashboard/organizationDashboard/${organizationId}`
 
 export function DashboardPage() {
   const loading = useInitialLoading()
   const activities = useAppStore((state) => state.activities)
+  const organizationId = useMemo(() => getOrganizationId(), [])
+  const [dashboardData, setDashboardData] = useState({
+    total_students: null,
+    total_teachers: null,
+  })
+  const [dashboardLoading, setDashboardLoading] = useState(true)
+  const [dashboardError, setDashboardError] = useState('')
+
+  const fetchDashboardData = useCallback(async () => {
+    if (!organizationId) {
+      setDashboardLoading(false)
+      setDashboardError('Organization id is required to load dashboard data.')
+      return
+    }
+
+    setDashboardLoading(true)
+    setDashboardError('')
+
+    try {
+      const response = await api.get(DASHBOARD_API(organizationId))
+
+      if (response?.data?.status === 'error') {
+        throw new Error(response?.data?.message || 'Failed to load dashboard data')
+      }
+
+      setDashboardData({
+        total_students: response?.data?.data?.total_students ?? null,
+        total_teachers: response?.data?.data?.total_teachers ?? null,
+      })
+    } catch (requestError) {
+      const message =
+        requestError?.response?.data?.message ||
+        requestError?.response?.data?.detail ||
+        requestError?.message ||
+        'Failed to load dashboard data'
+
+      setDashboardError(message)
+    } finally {
+      setDashboardLoading(false)
+    }
+  }, [organizationId])
+
+  useEffect(() => {
+    fetchDashboardData()
+  }, [fetchDashboardData])
+
+  const summaryCards = useMemo(
+    () => [
+      {
+        label: 'Total Students',
+        value: dashboardLoading ? '...' : String(dashboardData.total_students ?? '-'),
+        icon: GraduationCap,
+        cardClass: 'bg-[#d8fff0] text-slate-900',
+        iconClass: 'bg-emerald-500 text-white',
+      },
+      {
+        label: 'Total Teachers',
+        value: dashboardLoading ? '...' : String(dashboardData.total_teachers ?? '-'),
+        icon: Users,
+        cardClass: 'bg-[#dcebff] text-slate-900',
+        iconClass: 'bg-sky-500 text-white',
+      },
+      {
+        label: 'Total Vehicle',
+        value: '10',
+        icon: BusFront,
+        cardClass: 'bg-[#fff1c9] text-slate-900',
+        iconClass: 'bg-amber-400 text-white',
+      },
+    ],
+    [dashboardData.total_students, dashboardData.total_teachers, dashboardLoading],
+  )
 
   if (loading) {
     return (
@@ -44,29 +121,7 @@ export function DashboardPage() {
             </p>
           </div>
           <div className="grid min-w-0 gap-3 sm:grid-cols-3">
-            {[
-              {
-                label: 'Total Students',
-                value: '2403',
-                icon: GraduationCap,
-                cardClass: 'bg-[#d8fff0] text-slate-900',
-                iconClass: 'bg-emerald-500 text-white',
-              },
-              {
-                label: 'Total Staffs',
-                value: '19',
-                icon: Users,
-                cardClass: 'bg-[#dcebff] text-slate-900',
-                iconClass: 'bg-sky-500 text-white',
-              },
-              {
-                label: 'Total Vehicle',
-                value: '10',
-                icon: BusFront,
-                cardClass: 'bg-[#fff1c9] text-slate-900',
-                iconClass: 'bg-amber-400 text-white',
-              },
-            ].map((item) => (
+            {summaryCards.map((item) => (
               <div key={item.label} className={`rounded-[24px] px-4 py-4 ${item.cardClass}`}>
                 <div className="flex min-w-0 items-center justify-between gap-3">
                   <div className="flex min-w-0 items-center gap-3">
@@ -83,6 +138,11 @@ export function DashboardPage() {
             ))}
           </div>
         </div>
+        {dashboardError ? (
+          <div className="mt-4 rounded-2xl border border-rose-200 bg-rose-50 px-4 py-3 text-sm font-medium text-rose-700 dark:border-rose-900/60 dark:bg-rose-950/30 dark:text-rose-200">
+            {dashboardError}
+          </div>
+        ) : null}
       </section>
 
       <section className="grid gap-6 md:grid-cols-2 xl:grid-cols-4">
