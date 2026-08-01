@@ -3,40 +3,117 @@ import { Check, ChevronLeft, Fingerprint, LoaderCircle, LockKeyhole, Mail } from
 import { Link, useNavigate } from 'react-router-dom'
 import { Button } from '../../components/ui/Button'
 import { Input } from '../../components/ui/Input'
-import { apiService } from '../../services/apiService'
-import { useAppStore } from '../../store/appStore'
+import { Modal } from '../../components/ui/Modal'
 import { AuthShowcase } from './AuthShowcase'
 import api from "../../utils/api";
 import { useAuth } from '../../context/AuthContext'
 
+const PASSWORD_REQUIREMENTS_MESSAGE =
+  'Password must be at least 8 characters and include letters, a number, and a special character.'
+
+function isStrongPassword(value) {
+  return value.length >= 8 && /[A-Za-z]/.test(value) && /\d/.test(value) && /[^A-Za-z0-9]/.test(value)
+}
+
 export function LoginPage() {
   const navigate = useNavigate()
-  const setAuth = useAppStore((state) => state.setAuth)
   const [email, setEmail] = useState('')
   const [password, setPassword] = useState('')
   const [error, setError] = useState('')
   const [isSubmitting, setIsSubmitting] = useState(false)
+  const [forgotPasswordOpen, setForgotPasswordOpen] = useState(false)
+  const [forgotEmail, setForgotEmail] = useState('')
+  const [newPassword, setNewPassword] = useState('')
+  const [forgotPasswordError, setForgotPasswordError] = useState('')
+  const [forgotPasswordSuccess, setForgotPasswordSuccess] = useState('')
+  const [isUpdatingPassword, setIsUpdatingPassword] = useState(false)
 
   const { login } = useAuth();
 
-
-// ✅ Correct
 const handleSubmit = async (event) => {
   event.preventDefault()
   setError('')
   setIsSubmitting(true)
 
   try {
-    const { data } = await api.post("/users/login/", { email, password }); // ← your state vars
-    console.log("getting access token", data.data, data.data.access_token)
-    localStorage.setItem("DEFAULT_ORGANIZATION_ID", parseInt(data.data.organization_id))
-    login(data.data.access_token);
+    const { data } = await api.post("/users/login/", { email, password });
+    const authData = data.data
+
+    localStorage.setItem("DEFAULT_ORGANIZATION_ID", String(authData.organization_id))
+
+    const organizationName = authData.organization_name
+    if (organizationName) {
+      localStorage.setItem("DEFAULT_ORGANIZATION_NAME", organizationName)
+    }
+
+    login(authData.access_token);
     navigate('/dashboard', { replace: true })
   } catch {
     setError('Invalid credentials')
   } finally {
     setIsSubmitting(false)
   }
+}
+
+const handleForgotPasswordSubmit = async (event) => {
+  event.preventDefault()
+  setForgotPasswordError('')
+  setForgotPasswordSuccess('')
+
+  if (!isStrongPassword(newPassword)) {
+    setForgotPasswordError(PASSWORD_REQUIREMENTS_MESSAGE)
+    return
+  }
+
+  setIsUpdatingPassword(true)
+
+  try {
+    const { data } = await api.post('/users/forgotPassword/', {
+      email: forgotEmail.trim(),
+      new_password: newPassword,
+    })
+
+    if (data?.status === 'error') {
+      throw new Error(data?.message || 'Failed to update password')
+    }
+
+    setForgotPasswordSuccess(data?.message || 'Password updated successfully')
+    setPassword('')
+    window.setTimeout(() => {
+      setForgotPasswordOpen(false)
+      setForgotEmail('')
+      setNewPassword('')
+      setForgotPasswordSuccess('')
+    }, 1200)
+  } catch (requestError) {
+    const message =
+      requestError?.response?.data?.message ||
+      requestError?.response?.data?.detail ||
+      requestError?.message ||
+      'Failed to update password'
+
+    setForgotPasswordError(message)
+  } finally {
+    setIsUpdatingPassword(false)
+  }
+}
+
+const openForgotPasswordModal = () => {
+  setForgotEmail(email)
+  setNewPassword('')
+  setForgotPasswordError('')
+  setForgotPasswordSuccess('')
+  setForgotPasswordOpen(true)
+}
+
+const closeForgotPasswordModal = () => {
+  if (isUpdatingPassword) {
+    return
+  }
+
+  setForgotPasswordOpen(false)
+  setForgotPasswordError('')
+  setForgotPasswordSuccess('')
 }
   // const handleSubmit = async (event) => {
   //   event.preventDefault()
@@ -120,7 +197,11 @@ const handleSubmit = async (event) => {
                   </span>
                   Remember me
                 </label>
-                <button type="button" className="text-left font-medium text-slate-500 transition hover:text-brand-600">
+                <button
+                  type="button"
+                  onClick={openForgotPasswordModal}
+                  className="text-left font-medium text-slate-500 transition hover:text-brand-600"
+                >
                   Forgot Password?
                 </button>
               </div>
@@ -149,6 +230,47 @@ const handleSubmit = async (event) => {
 
         <AuthShowcase />
       </div>
+
+      <Modal
+        open={forgotPasswordOpen}
+        onClose={closeForgotPasswordModal}
+        title="Forgot password"
+        description="Enter your email address and set a new password."
+      >
+        <form className="space-y-4" onSubmit={handleForgotPasswordSubmit}>
+          <Input
+            type="email"
+            icon={Mail}
+            placeholder="Email address"
+            value={forgotEmail}
+            onChange={(event) => setForgotEmail(event.target.value)}
+            autoComplete="email"
+            required
+          />
+          <Input
+            type="password"
+            icon={LockKeyhole}
+            placeholder="New password"
+            value={newPassword}
+            onChange={(event) => setNewPassword(event.target.value)}
+            autoComplete="new-password"
+            required
+          />
+
+          {forgotPasswordError ? <p className="text-sm font-medium text-rose-500">{forgotPasswordError}</p> : null}
+          {forgotPasswordSuccess ? <p className="text-sm font-medium text-emerald-600">{forgotPasswordSuccess}</p> : null}
+
+          <div className="flex justify-end gap-3">
+            <Button type="button" variant="secondary" onClick={closeForgotPasswordModal} disabled={isUpdatingPassword}>
+              Cancel
+            </Button>
+            <Button type="submit" variant="brand" disabled={isUpdatingPassword}>
+              {isUpdatingPassword ? <LoaderCircle size={16} className="animate-spin" /> : null}
+              {isUpdatingPassword ? 'Updating' : 'Update Password'}
+            </Button>
+          </div>
+        </form>
+      </Modal>
     </div>
   )
 }

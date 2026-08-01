@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react'
+import { useCallback, useEffect, useMemo, useState } from 'react'
 import { Controller, useForm } from 'react-hook-form'
 import { Edit3, Plus, Search, Trash2, UserPlus, Users } from 'lucide-react'
 import { useNavigate } from 'react-router-dom'
@@ -241,6 +241,46 @@ export function RegisteredStudentsPage() {
     },
   })
 
+  const loadRegisteredStudents = useCallback(
+    async ({ showLoader = true } = {}) => {
+      if (!organizationId) {
+        setStudents([])
+        setError('Organization id is required to load registered students')
+        setLoading(false)
+        return
+      }
+
+      if (showLoader) {
+        setLoading(true)
+      }
+      setError('')
+
+      try {
+        const payload = await api.get(`/students/getAllRegisterdStudents/${organizationId}`)
+
+        if (payload?.data?.status === 'error' || payload?.status === 'error') {
+          throw new Error(payload?.data?.message || payload?.message || 'Failed to load registered students')
+        }
+
+        const rawRows = extractStudentRows(payload)
+        const rows = rawRows.map((record, index) => normalizeStudent(record, index))
+        setStudents(rows)
+      } catch (requestError) {
+        const backendMessage =
+          requestError?.response?.data?.message ||
+          requestError?.response?.data?.detail ||
+          requestError?.message ||
+          'Failed to load registered students'
+        setError(backendMessage)
+      } finally {
+        if (showLoader) {
+          setLoading(false)
+        }
+      }
+    },
+    [organizationId],
+  )
+
   useEffect(() => {
     if (!notification) {
       return undefined
@@ -251,44 +291,8 @@ export function RegisteredStudentsPage() {
   }, [notification])
 
   useEffect(() => {
-    let active = true
-
-    async function loadStudents() {
-      setLoading(true)
-      setError('')
-
-      try {
-        // const payload = await apiService.getAllRegisteredStudents(DEFAULT_ORGANIZATION_ID)
-         const payload = await api.get(`/students/getAllRegisterdStudents/${DEFAULT_ORGANIZATION_ID}`)
-
-        if (payload?.status === 'error') {
-          throw new Error(payload.message || 'Failed to load registered students')
-        }
-
-        const rawRows = extractStudentRows(payload)
-        const rows = rawRows.map((record, index) => normalizeStudent(record, index))
-
-        if (active) {
-          setStudents(rows)
-        }
-      } catch (requestError) {
-        if (active) {
-          const backendMessage = requestError?.message
-          setError(backendMessage || 'Failed to load registered students')
-        }
-      } finally {
-        if (active) {
-          setLoading(false)
-        }
-      }
-    }
-
-    loadStudents()
-
-    return () => {
-      active = false
-    }
-  }, [])
+    loadRegisteredStudents()
+  }, [loadRegisteredStudents])
 
   useEffect(() => {
     let active = true
@@ -446,6 +450,7 @@ export function RegisteredStudentsPage() {
 
       notify('success', response?.message || 'student enrolled successfully')
       closeEnrollModal()
+      await loadRegisteredStudents({ showLoader: false })
     } catch (requestError) {
       notify('error', requestError.message || 'student enroll faild & catched')
     }

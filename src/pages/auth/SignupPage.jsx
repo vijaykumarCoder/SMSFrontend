@@ -6,6 +6,13 @@ import { Input, Select } from '../../components/ui/Input'
 import api from '../../utils/api'
 import { AuthShowcase } from './AuthShowcase'
 
+const PASSWORD_REQUIREMENTS_MESSAGE =
+  'Password must be at least 8 characters and include letters, a number, and a special character.'
+
+function isStrongPassword(value) {
+  return value.length >= 8 && /[A-Za-z]/.test(value) && /\d/.test(value) && /[^A-Za-z0-9]/.test(value)
+}
+
 export function SignupPage() {
   const navigate = useNavigate()
   const [formData, setFormData] = useState({
@@ -29,6 +36,11 @@ export function SignupPage() {
     event.preventDefault()
     setError('')
     setSuccess('')
+
+    if (!isStrongPassword(formData.password)) {
+      setError(PASSWORD_REQUIREMENTS_MESSAGE)
+      return
+    }
 
     if (formData.password !== formData.confirmPassword) {
       setError('Passwords do not match.')
