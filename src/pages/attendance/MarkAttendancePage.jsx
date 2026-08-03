@@ -286,12 +286,12 @@ export function MarkAttendancePage() {
     const payload = {
       attendance: visibleRows.map((row) => ({
         student_enroll_id: row.student_enroll_id,
-        organization_id: organizationId,
-        teacher_id: 2,
-        class_id: Number(selectedClassId),
-        section_id: Number(selectedSectionId),
         status: attendanceMap[row.id] || row.status || 'present',
       })),
+      organization_id: organizationId,
+      teacher_id: 2,
+      class_id: Number(selectedClassId),
+      section_id: Number(selectedSectionId),
     }
 
     setSubmitting(true)
