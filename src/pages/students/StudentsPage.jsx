@@ -1,20 +1,41 @@
 import { Eye, Search, SquarePen, Trash2 } from 'lucide-react'
 import { useCallback, useEffect, useMemo, useState } from 'react'
+import { useForm } from 'react-hook-form'
 
 import { Badge } from '../../components/ui/Badge'
 import { Button } from '../../components/ui/Button'
 import { Card } from '../../components/ui/Card'
 import { EmptyState } from '../../components/ui/EmptyState'
 import { Input, Select } from '../../components/ui/Input'
+import { Modal } from '../../components/ui/Modal'
 import { Table } from '../../components/ui/Table'
 import api from '../../utils/api'
 import { fetchClassSectionCatalog, getOrganizationId } from '../../utils/classSections'
 
 const GET_STUDENTS_API = (organizationId) => `/students/getAllEnrolledStudents/${organizationId}`
 const DELETE_STUDENT_API = (studentEnrollId) => `/students/deleteEnrolledStudent/${studentEnrollId}`
+const UPDATE_STUDENT_API = '/students/updateEnrolledStudent'
 
 function normalizeComparable(value) {
   return String(value ?? '').trim().toLowerCase()
+}
+
+function getApiMessage(payload, fallback = '') {
+  return payload?.data?.message || payload?.message || payload?.response?.data?.message || payload?.response?.message || fallback
+}
+
+async function updateEnrolledStudent(payload) {
+  try {
+    return await api.put(UPDATE_STUDENT_API, payload)
+  } catch (error) {
+    const status = error?.response?.status
+
+    if (status && status !== 404 && status !== 405) {
+      throw error
+    }
+
+    return api.post(UPDATE_STUDENT_API, payload)
+  }
 }
 
 function readFirstValue(record, keys) {
@@ -44,6 +65,7 @@ function normalizeStudent(record, index = 0) {
     name: String(readFirstValue(record, ['student_name', 'studentName', 'name', 'full_name'])).trim(),
     className: String(readFirstValue(record, ['class_name', 'className', 'class'])).trim(),
     section: String(readFirstValue(record, ['section', 'section_name', 'sectionName'])).trim(),
+    phone_number: String(readFirstValue(record, ['phone_number', 'phoneNumber', 'contact', 'guardian_phone'])).trim(),
     contact: String(readFirstValue(record, ['contact', 'phone_number', 'phoneNumber', 'guardian_phone'])).trim(),
     status: String(readFirstValue(record, ['status'])).trim(),
     raw: record ?? {},
@@ -105,7 +127,11 @@ const columns = [
   },
   { key: 'className', label: 'Class' },
   { key: 'section', label: 'Section' },
-  { key: 'contact', label: 'Contact' },
+  {
+    key: 'phone_number',
+    label: 'Phone Number',
+    render: (row) => <span>{row.phone_number || row.contact || 'Not available'}</span>,
+  },
   {
     key: 'status',
     label: 'Status',
@@ -123,9 +149,28 @@ export function StudentsPage() {
   const [catalogLoading, setCatalogLoading] = useState(true)
   const [error, setError] = useState('')
   const [deletingId, setDeletingId] = useState('')
+  const [saving, setSaving] = useState(false)
+  const [modalOpen, setModalOpen] = useState(false)
+  const [editingStudent, setEditingStudent] = useState(null)
   const [notification, setNotification] = useState(null)
 
   const organizationId = useMemo(() => getOrganizationId(), [])
+  const {
+    register,
+    handleSubmit,
+    reset,
+    setError: setFormError,
+    clearErrors,
+    formState: { errors },
+  } = useForm({
+    defaultValues: {
+      student_name: '',
+      class_name: '',
+      section_name: '',
+      phone_number: '',
+      status: 'Active',
+    },
+  })
 
   useEffect(() => {
     if (!notification) {
@@ -161,7 +206,7 @@ export function StudentsPage() {
       const rows = extractStudentRows(response).map((record, index) => normalizeStudent(record, index))
       setStudents(rows)
     } catch (requestError) {
-      const backendMessage = requestError?.response?.data?.message || requestError?.message || 'Failed to load students'
+      const backendMessage = getApiMessage(requestError, 'Failed to load students')
       setError(backendMessage)
     } finally {
       setLoading(false)
@@ -235,7 +280,7 @@ export function StudentsPage() {
     return students.filter((student) => {
       const matchesQuery =
         !normalizedQuery ||
-        [student.name, student.className, student.section, student.contact, student.status]
+        [student.name, student.className, student.section, student.phone_number, student.contact, student.status]
           .filter(Boolean)
           .some((value) => String(value).toLowerCase().includes(normalizedQuery))
 
@@ -246,6 +291,66 @@ export function StudentsPage() {
       return matchesQuery && matchesClass && matchesSection
     })
   }, [classFilter, query, sectionFilter, students])
+
+  const openEditModal = (student) => {
+    setEditingStudent(student)
+    clearErrors()
+    reset({
+      student_name: student.name || '',
+      class_name: student.className || '',
+      section_name: student.section || '',
+      phone_number: student.phone_number || student.contact || '',
+      status: student.status || 'Active',
+    })
+    setModalOpen(true)
+  }
+
+  const closeModal = () => {
+    setModalOpen(false)
+    setEditingStudent(null)
+    clearErrors()
+    reset({
+      student_name: '',
+      class_name: '',
+      section_name: '',
+      phone_number: '',
+      status: 'Active',
+    })
+  }
+
+  const onSubmit = async (values) => {
+    if (!editingStudent) {
+      return
+    }
+
+    setSaving(true)
+    setError('')
+
+    const payload = {
+      student_enroll_id: editingStudent.student_enroll_id ?? editingStudent.id,
+      student_name: values.student_name.trim(),
+      class_name: values.class_name.trim(),
+      section_name: values.section_name.trim(),
+      phone_number: values.phone_number.trim(),
+      status: values.status || 'Active',
+    }
+
+    try {
+      const response = await updateEnrolledStudent(payload)
+      notify('success', getApiMessage(response, 'Student updated successfully'))
+      closeModal()
+      await fetchStudents()
+    } catch (submitError) {
+      const backendMessage = getApiMessage(submitError, 'Failed to update student')
+      setFormError('student_name', {
+        type: 'server',
+        message: backendMessage,
+      })
+      notify('error', backendMessage)
+    } finally {
+      setSaving(false)
+    }
+  }
 
   const handleDelete = async (student) => {
     const studentEnrollId = student.student_enroll_id ?? student.id
@@ -264,11 +369,12 @@ export function StudentsPage() {
     setError('')
 
     try {
-      await api.delete(DELETE_STUDENT_API(studentEnrollId))
-      notify('success', 'Student deleted successfully')
+      const response = await api.delete(DELETE_STUDENT_API(studentEnrollId))
+      const successMessage = getApiMessage(response, 'Student deleted successfully')
+      notify('success', successMessage)
       await fetchStudents()
     } catch (requestError) {
-      const backendMessage = requestError?.response?.data?.message || requestError?.message || 'Failed to delete student'
+      const backendMessage = getApiMessage(requestError, 'Failed to delete student')
       setError(backendMessage)
       notify('error', backendMessage)
     } finally {
@@ -363,6 +469,7 @@ export function StudentsPage() {
                     <button
                       key={index}
                       type="button"
+                      onClick={() => openEditModal(row)}
                       className="flex h-10 w-10 items-center justify-center rounded-2xl bg-slate-100 text-slate-600 hover:bg-brand-100 hover:text-brand-700 dark:bg-slate-800 dark:text-slate-300 dark:hover:bg-brand-500/15 dark:hover:text-brand-300"
                       aria-label={`${Icon === Eye ? 'View' : 'Edit'} ${row.name || 'student'}`}
                     >
@@ -384,6 +491,56 @@ export function StudentsPage() {
           )}
         </div>
       </Card>
+
+      <Modal
+        open={modalOpen}
+        onClose={closeModal}
+        title="Edit Enrolled Student"
+        description="Update the enrolled student details and save them to the backend."
+      >
+        <form onSubmit={handleSubmit(onSubmit)} className="grid gap-4 md:grid-cols-2">
+          <Input
+            label="Student Name"
+            placeholder="Enter student name"
+            error={errors.student_name?.message}
+            {...register('student_name', { required: 'Student name is required' })}
+          />
+          <Input
+            label="Class Name"
+            placeholder="Enter class name"
+            error={errors.class_name?.message}
+            {...register('class_name', { required: 'Class name is required' })}
+          />
+          <Input
+            label="Section Name"
+            placeholder="Enter section name"
+            error={errors.section_name?.message}
+            {...register('section_name', { required: 'Section name is required' })}
+          />
+          <Input
+            label="Phone Number"
+            placeholder="Enter phone number"
+            error={errors.phone_number?.message}
+            {...register('phone_number', { required: 'Phone number is required' })}
+          />
+          <div className="md:col-span-2">
+            <Select label="Status" error={errors.status?.message} {...register('status', { required: 'Status is required' })}>
+              <option value="Active">Active</option>
+              <option value="Inactive">Inactive</option>
+              <option value="On Leave">On Leave</option>
+              <option value="Probation">Probation</option>
+            </Select>
+          </div>
+          <div className="md:col-span-2 flex justify-end gap-3">
+            <Button type="button" variant="secondary" onClick={closeModal}>
+              Cancel
+            </Button>
+            <Button type="submit" variant="brand" disabled={saving}>
+              {saving ? 'Saving...' : 'Save Changes'}
+            </Button>
+          </div>
+        </form>
+      </Modal>
     </div>
   )
 }
