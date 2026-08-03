@@ -12,7 +12,7 @@ import api from '../../utils/api'
 import { fetchClassSectionCatalog, getOrganizationId } from '../../utils/classSections'
 
 const CREATE_CLASS_API = 'http://localhost:8000/classes/createClass'
-const UPDATE_CLASS_API = (classId) => `http://localhost:8000/classes/${classId}`
+const UPDATE_CLASS_API = 'http://localhost:8000/classes/updateClass'
 const DELETE_CLASS_API = (classId) => `/classes/deleteClass/${classId}`
 const SECTION_OPTIONS = ['A', 'B', 'C', 'D', 'E', 'F']
 
@@ -30,6 +30,73 @@ function getApiMessage(payload, fallback = '') {
   return payload?.data?.message || payload?.message || payload?.response?.data?.message || payload?.response?.message || fallback
 }
 
+function readFirstValue(record, keys) {
+  for (const key of keys) {
+    const value = record?.[key]
+    if (value !== undefined && value !== null && String(value).trim() !== '') {
+      return value
+    }
+  }
+
+  return ''
+}
+
+function extractTeacherRows(response) {
+  const candidates = [response, response?.data, response?.data?.data, response?.data?.teachers, response?.teachers]
+
+  for (const candidate of candidates) {
+    if (Array.isArray(candidate)) {
+      return candidate
+    }
+  }
+
+  return []
+}
+
+function normalizeTeacherOption(record, index = 0) {
+  const teacherName = String(readFirstValue(record, ['teacher_name', 'teacherName', 'name'])).trim()
+
+  if (!teacherName) {
+    return null
+  }
+
+  return {
+    id: record?.teacher_id ?? record?.id ?? record?._id ?? `teacher-${index}`,
+    value: String(record?.teacher_id ?? record?.id ?? record?._id ?? ''),
+    label: teacherName,
+  }
+}
+
+async function fetchTeacherOptions(organizationId) {
+  if (!organizationId) {
+    return []
+  }
+
+  const endpoints = [`/teachers/getAllTeachers/${organizationId}`, `/teachers/getAllTeachers?organization_id=${organizationId}`, `/teachers/getAllTeachers${organizationId}`]
+
+  let lastError = null
+
+  for (const endpoint of endpoints) {
+    try {
+      const response = await api.get(endpoint)
+      const rows = extractTeacherRows(response)
+      const teacherOptions = rows.map(normalizeTeacherOption).filter(Boolean)
+
+      if (teacherOptions.length) {
+        return teacherOptions
+      }
+    } catch (error) {
+      lastError = error
+    }
+  }
+
+  if (lastError) {
+    throw lastError
+  }
+
+  return []
+}
+
 function getSectionTeacherLabel(sections = []) {
   const teachers = [...new Set(sections.map((section) => section.classTeacher).filter(Boolean))]
   return teachers.length ? teachers.join(', ') : 'Not assigned'
@@ -45,6 +112,32 @@ function getUniqueSections(classes = [], classFilter = 'All') {
   return uniqueSections.sort((left, right) => left.sectionName.localeCompare(right.sectionName))
 }
 
+function getClassSortValue(value = '') {
+  const normalized = String(value ?? '').trim().toLowerCase()
+  const match = normalized.match(/(\d+)/)
+  const numericValue = match ? Number(match[1]) : Number.MAX_SAFE_INTEGER
+
+  return {
+    numericValue,
+    textValue: normalized,
+  }
+}
+
+function compareClassNames(left = '', right = '') {
+  const leftValue = getClassSortValue(left)
+  const rightValue = getClassSortValue(right)
+
+  if (leftValue.numericValue !== rightValue.numericValue) {
+    return leftValue.numericValue - rightValue.numericValue
+  }
+
+  return leftValue.textValue.localeCompare(rightValue.textValue)
+}
+
+function extractClassNumber(value = '') {
+  return String(value ?? '').trim().replace(/\D/g, '')
+}
+
 export function ClassesPage() {
   const [classes, setClasses] = useState([])
   const [classFilter, setClassFilter] = useState('All')
@@ -56,6 +149,7 @@ export function ClassesPage() {
   const [deletingId, setDeletingId] = useState('')
   const [editingClass, setEditingClass] = useState(null)
   const [notification, setNotification] = useState(null)
+  const [teacherOptions, setTeacherOptions] = useState([])
   const isMountedRef = useRef(false)
   const organizationId = getOrganizationId()
 
@@ -70,6 +164,7 @@ export function ClassesPage() {
     defaultValues: {
       className: '',
       section: 'A',
+      teacherId: '',
     },
   })
 
@@ -111,14 +206,38 @@ export function ClassesPage() {
     }
   }, [organizationId])
 
+  const fetchTeachers = useCallback(async () => {
+    if (!organizationId) {
+      setTeacherOptions([])
+      return
+    }
+
+    try {
+      const nextTeachers = await fetchTeacherOptions(organizationId)
+
+      if (!isMountedRef.current) {
+        return
+      }
+
+      setTeacherOptions(nextTeachers)
+    } catch (teacherError) {
+      if (!isMountedRef.current) {
+        return
+      }
+
+      setTeacherOptions([])
+    }
+  }, [organizationId])
+
   useEffect(() => {
     isMountedRef.current = true
     fetchClasses()
+    fetchTeachers()
 
     return () => {
       isMountedRef.current = false
     }
-  }, [fetchClasses])
+  }, [fetchClasses, fetchTeachers])
 
   useEffect(() => {
     if (sectionFilter === 'All') {
@@ -137,7 +256,7 @@ export function ClassesPage() {
     return ['All', ...new Set(classes.map((item) => item.className).filter(Boolean))].sort((left, right) => {
       if (left === 'All') return -1
       if (right === 'All') return 1
-      return left.localeCompare(right)
+      return compareClassNames(left, right)
     })
   }, [classes])
 
@@ -153,6 +272,7 @@ export function ClassesPage() {
     reset({
       className: '',
       section: 'A',
+      teacherId: '',
     })
     setModalOpen(true)
   }
@@ -160,9 +280,18 @@ export function ClassesPage() {
   const openEditModal = (row) => {
     setEditingClass(row)
     clearErrors()
+
+    const matchingSection =
+      row?.sections?.find((section) => String(section?.sectionName ?? '').trim() === String(row?.primarySection ?? '').trim()) ||
+      row?.sections?.[0] ||
+      null
+    const teacherId = matchingSection?.classTeacherId ? String(matchingSection.classTeacherId) : ''
+    const classNumber = extractClassNumber(row?.className)
+
     reset({
-      className: row.className,
-      section: normalizeSectionValue(row.primarySection),
+      className: classNumber,
+      section: normalizeSectionValue(row?.primarySection || matchingSection?.sectionName),
+      teacherId,
     })
     setModalOpen(true)
   }
@@ -181,10 +310,17 @@ export function ClassesPage() {
     setError('')
 
     try {
+      const trimmedClassNumber = String(values.className ?? '').trim()
+      const numericClassNumber = trimmedClassNumber.replace(/\D/g, '')
+      const normalizedClassName = numericClassNumber ? `Class ${numericClassNumber}` : ''
+      const normalizedSectionName = `${values.section} Section`
+      const teacherId = values.teacherId ? Number(values.teacherId) : null
+
       const response = await api.post(CREATE_CLASS_API, {
         organization_id: organizationId,
-        class_name: `Class ${values.className.trim()}`,
-        section_name: `Section ${values.section}`,
+        class_name: normalizedClassName,
+        section_name: normalizedSectionName,
+        teacher_id: teacherId,
       })
 
       notify('success', getApiMessage(response, 'Saved successfully'))
@@ -193,6 +329,7 @@ export function ClassesPage() {
       reset({
         className: '',
         section: 'A',
+        teacherId: '',
       })
       await fetchClasses()
     } catch (submitError) {
@@ -223,10 +360,30 @@ export function ClassesPage() {
     setError('')
 
     try {
-      const response = await api.put(UPDATE_CLASS_API(editingClass.classId), {
-        class_name: values.className.trim(),
-        section_name: values.section,
-      })
+      const trimmedClassNumber = String(values.className ?? '').trim()
+      const numericClassNumber = trimmedClassNumber.replace(/\D/g, '')
+      const normalizedClassName = numericClassNumber ? `Class ${numericClassNumber}` : String(editingClass?.className ?? '').trim()
+      const normalizedSectionName = `${normalizeSectionValue(values.section)} Section`
+      const selectedSection =
+        editingClass?.sections?.find((section) => String(section.sectionName) === String(normalizeSectionValue(values.section))) ||
+        editingClass?.sections?.find((section) => String(section.sectionName) === String(editingClass?.primarySection ?? '')) ||
+        editingClass?.sections?.[0] ||
+        null
+      const teacherId = values.teacherId
+        ? Number(values.teacherId)
+        : selectedSection?.classTeacherId
+          ? Number(selectedSection.classTeacherId)
+          : null
+      const nextPayload = {
+        organization_id: organizationId,
+        class_id: editingClass.classId,
+        class_name: normalizedClassName,
+        section_name: normalizedSectionName,
+        section_id: selectedSection?.sectionId ?? null,
+        teacher_id: teacherId,
+      }
+
+      const response = await api.put(UPDATE_CLASS_API(editingClass.classId), nextPayload)
 
       notify('success', getApiMessage(response, 'Saved successfully'))
       setModalOpen(false)
@@ -234,6 +391,7 @@ export function ClassesPage() {
       reset({
         className: '',
         section: 'A',
+        teacherId: '',
       })
       await fetchClasses()
     } catch (updateError) {
@@ -284,8 +442,9 @@ export function ClassesPage() {
         className: item.className,
         classTeacher: getSectionTeacherLabel(item.sections),
         primarySection: item.sections?.[0]?.sectionName ?? '',
+        sections: item.sections ?? [],
       }))
-      .sort((left, right) => left.className.localeCompare(right.className))
+      .sort((left, right) => compareClassNames(left.className, right.className))
   }, [classFilter, classes, sectionFilter])
 
   const columns = useMemo(
@@ -412,18 +571,32 @@ export function ClassesPage() {
         <form onSubmit={handleSubmit(editingClass ? onEditSubmit : onSubmit)} className="grid gap-4 md:grid-cols-2">
           <Input
             label="Class Name"
-            placeholder="Enter class name"
+            placeholder="Enter class number"
             error={errors.className?.message}
-            type='number'
+            type="number"
+            inputMode="numeric"
+            step="1"
+            min="1"
             {...register('className', {
               required: 'Class name is required',
-              validate: (value) => value.trim().length > 0 || 'Class name is required',
+              validate: (value) => {
+                const normalized = String(value ?? '').trim()
+                return normalized.length > 0 || 'Class name is required'
+              },
             })}
           />
           <Select label="Section" error={errors.section?.message} {...register('section', { required: 'Section is required' })}>
             {SECTION_OPTIONS.map((section) => (
               <option key={section} value={section}>
                 Section {section}
+              </option>
+            ))}
+          </Select>
+          <Select label="Class Teacher" error={errors.teacherId?.message} {...register('teacherId')}>
+            <option value="">Select teacher</option>
+            {teacherOptions.map((teacher) => (
+              <option key={teacher.id} value={teacher.value}>
+                {teacher.label}
               </option>
             ))}
           </Select>

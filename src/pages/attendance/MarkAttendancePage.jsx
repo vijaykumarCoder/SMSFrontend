@@ -260,6 +260,33 @@ export function MarkAttendancePage() {
     [catalog, selectedClassId],
   )
 
+  const selectedSection = useMemo(() => {
+    if (!selectedClass || !selectedSectionId) {
+      return null
+    }
+
+    return (
+      selectedClass.sections.find((section) => String(section.sectionId) === String(selectedSectionId)) ?? null
+    )
+  }, [selectedClass, selectedSectionId])
+
+  const selectedTeacherId = useMemo(() => {
+    const teacherId =
+      selectedSection?.classTeacherId ??
+      selectedSection?.teacherId ??
+      selectedSection?.teacher_id ??
+      selectedClass?.classTeacherId ??
+      selectedClass?.teacherId ??
+      selectedClass?.teacher_id ??
+      null
+
+    if (teacherId === null || teacherId === undefined || teacherId === '') {
+      return null
+    }
+
+    return Number(teacherId)
+  }, [selectedClass, selectedSection])
+
   const sectionOptions = useMemo(() => selectedClass?.sections ?? [], [selectedClass])
 
   const visibleRows = useMemo(() => {
@@ -285,13 +312,13 @@ export function MarkAttendancePage() {
 
     const payload = {
       attendance: visibleRows.map((row) => ({
-        student_enroll_id: row.student_enroll_id,
-        organization_id: organizationId,
-        teacher_id: 2,
-        class_id: Number(selectedClassId),
-        section_id: Number(selectedSectionId),
+        student_enroll_id: Number(row.student_enroll_id),
         status: attendanceMap[row.id] || row.status || 'present',
       })),
+      organization_id: Number(organizationId),
+      teacher_id: selectedTeacherId,
+      class_id: Number(selectedClassId),
+      section_id: Number(selectedSectionId),
     }
 
     setSubmitting(true)
@@ -310,7 +337,7 @@ export function MarkAttendancePage() {
     } finally {
       setSubmitting(false)
     }
-  }, [attendanceMap, fetchAttendance, notify, organizationId, selectedClassId, selectedSectionId, visibleRows])
+  }, [attendanceMap, fetchAttendance, notify, organizationId, selectedClassId, selectedSectionId, selectedTeacherId, visibleRows])
 
   const isLoading = loadingCatalog || loadingAttendance
 
