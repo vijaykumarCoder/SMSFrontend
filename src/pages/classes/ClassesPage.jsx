@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
-import { Controller, useForm } from 'react-hook-form'
+import { useForm } from 'react-hook-form'
 import { Edit3, Plus, Trash2 } from 'lucide-react'
 
 import { Button } from '../../components/ui/Button'
@@ -12,9 +12,8 @@ import api from '../../utils/api'
 import { fetchClassSectionCatalog, getOrganizationId } from '../../utils/classSections'
 
 const CREATE_CLASS_API = 'http://localhost:8000/classes/createClass'
-const UPDATE_CLASS_API = (classId) => `http://localhost:8000/classes/update Class/${classId}`
-const DELETE_CLASS_API = (classId) => `http://localhost:8000/classes/deleteClass/${classId}`
-const GET_TEACHERS_API = (organizationId) => `http://localhost:8000/teachers/getAllTeachers/${organizationId}`
+const UPDATE_CLASS_API = 'http://localhost:8000/classes/updateClass'
+const DELETE_CLASS_API = (classId) => `/classes/deleteClass/${classId}`
 const SECTION_OPTIONS = ['A', 'B', 'C', 'D', 'E', 'F']
 
 function normalizeSectionValue(value) {
@@ -27,15 +26,13 @@ function normalizeSectionValue(value) {
   return rawValue.replace(/^section\s+/i, '').trim() || 'A'
 }
 
-function getSectionTeacherLabel(sections = []) {
-  const teachers = [...new Set(sections.map((section) => section.classTeacher).filter(Boolean))]
-  return teachers.length ? teachers.join(', ') : 'Not assigned'
+function getApiMessage(payload, fallback = '') {
+  return payload?.data?.message || payload?.message || payload?.response?.data?.message || payload?.response?.message || fallback
 }
 
 function readFirstValue(record, keys) {
   for (const key of keys) {
     const value = record?.[key]
-
     if (value !== undefined && value !== null && String(value).trim() !== '') {
       return value
     }
@@ -45,7 +42,7 @@ function readFirstValue(record, keys) {
 }
 
 function extractTeacherRows(response) {
-  const candidates = [response, response?.data, response?.data?.data, response?.data?.teachers, response?.teachers, response?.results]
+  const candidates = [response, response?.data, response?.data?.data, response?.data?.teachers, response?.teachers]
 
   for (const candidate of candidates) {
     if (Array.isArray(candidate)) {
@@ -56,16 +53,53 @@ function extractTeacherRows(response) {
   return []
 }
 
-function normalizeTeacher(record, index = 0) {
-  const teacherId = record?.teacher_id ?? record?.teacherId ?? record?.id ?? record?._id ?? `teacher-${index}`
+function normalizeTeacherOption(record, index = 0) {
+  const teacherName = String(readFirstValue(record, ['teacher_name', 'teacherName', 'name'])).trim()
+
+  if (!teacherName) {
+    return null
+  }
 
   return {
-    id: teacherId,
-    teacherId: record?.teacher_id ?? record?.teacherId ?? record?.id ?? record?._id ?? null,
-    teacher_name: String(readFirstValue(record, ['teacher_name', 'teacherName', 'name'])).trim(),
-    subject: String(readFirstValue(record, ['subject'])).trim(),
-    raw: record ?? {},
+    id: record?.teacher_id ?? record?.id ?? record?._id ?? `teacher-${index}`,
+    value: String(record?.teacher_id ?? record?.id ?? record?._id ?? ''),
+    label: teacherName,
   }
+}
+
+async function fetchTeacherOptions(organizationId) {
+  if (!organizationId) {
+    return []
+  }
+
+  const endpoints = [`/teachers/getAllTeachers/${organizationId}`, `/teachers/getAllTeachers?organization_id=${organizationId}`, `/teachers/getAllTeachers${organizationId}`]
+
+  let lastError = null
+
+  for (const endpoint of endpoints) {
+    try {
+      const response = await api.get(endpoint)
+      const rows = extractTeacherRows(response)
+      const teacherOptions = rows.map(normalizeTeacherOption).filter(Boolean)
+
+      if (teacherOptions.length) {
+        return teacherOptions
+      }
+    } catch (error) {
+      lastError = error
+    }
+  }
+
+  if (lastError) {
+    throw lastError
+  }
+
+  return []
+}
+
+function getSectionTeacherLabel(sections = []) {
+  const teachers = [...new Set(sections.map((section) => section.classTeacher).filter(Boolean))]
+  return teachers.length ? teachers.join(', ') : 'Not assigned'
 }
 
 function getUniqueSections(classes = [], classFilter = 'All') {
@@ -78,20 +112,44 @@ function getUniqueSections(classes = [], classFilter = 'All') {
   return uniqueSections.sort((left, right) => left.sectionName.localeCompare(right.sectionName))
 }
 
+function getClassSortValue(value = '') {
+  const normalized = String(value ?? '').trim().toLowerCase()
+  const match = normalized.match(/(\d+)/)
+  const numericValue = match ? Number(match[1]) : Number.MAX_SAFE_INTEGER
+
+  return {
+    numericValue,
+    textValue: normalized,
+  }
+}
+
+function compareClassNames(left = '', right = '') {
+  const leftValue = getClassSortValue(left)
+  const rightValue = getClassSortValue(right)
+
+  if (leftValue.numericValue !== rightValue.numericValue) {
+    return leftValue.numericValue - rightValue.numericValue
+  }
+
+  return leftValue.textValue.localeCompare(rightValue.textValue)
+}
+
+function extractClassNumber(value = '') {
+  return String(value ?? '').trim().replace(/\D/g, '')
+}
+
 export function ClassesPage() {
   const [classes, setClasses] = useState([])
-  const [teachers, setTeachers] = useState([])
   const [classFilter, setClassFilter] = useState('All')
   const [sectionFilter, setSectionFilter] = useState('All')
   const [loading, setLoading] = useState(true)
-  const [teachersLoading, setTeachersLoading] = useState(true)
   const [error, setError] = useState('')
-  const [teacherError, setTeacherError] = useState('')
   const [modalOpen, setModalOpen] = useState(false)
   const [saving, setSaving] = useState(false)
   const [deletingId, setDeletingId] = useState('')
   const [editingClass, setEditingClass] = useState(null)
   const [notification, setNotification] = useState(null)
+  const [teacherOptions, setTeacherOptions] = useState([])
   const isMountedRef = useRef(false)
   const organizationId = getOrganizationId()
 
@@ -101,7 +159,6 @@ export function ClassesPage() {
     reset,
     setError: setFormError,
     clearErrors,
-    control,
     formState: { errors },
   } = useForm({
     defaultValues: {
@@ -151,38 +208,24 @@ export function ClassesPage() {
 
   const fetchTeachers = useCallback(async () => {
     if (!organizationId) {
-      setTeachers([])
-      setTeacherError('Organization id is required to load teachers')
-      setTeachersLoading(false)
+      setTeacherOptions([])
       return
     }
 
-    setTeachersLoading(true)
-    setTeacherError('')
-
     try {
-      const response = await api.get(GET_TEACHERS_API(organizationId))
-      const nextTeachers = extractTeacherRows(response)
-        .map((record, index) => normalizeTeacher(record, index))
-        .sort((left, right) => left.teacher_name.localeCompare(right.teacher_name))
+      const nextTeachers = await fetchTeacherOptions(organizationId)
 
       if (!isMountedRef.current) {
         return
       }
 
-      setTeachers(nextTeachers)
-    } catch (fetchError) {
+      setTeacherOptions(nextTeachers)
+    } catch (teacherError) {
       if (!isMountedRef.current) {
         return
       }
 
-      const backendMessage = fetchError?.response?.data?.message || fetchError?.message || 'Failed to load teachers'
-      setTeachers([])
-      setTeacherError(backendMessage)
-    } finally {
-      if (isMountedRef.current) {
-        setTeachersLoading(false)
-      }
+      setTeacherOptions([])
     }
   }, [organizationId])
 
@@ -213,7 +256,7 @@ export function ClassesPage() {
     return ['All', ...new Set(classes.map((item) => item.className).filter(Boolean))].sort((left, right) => {
       if (left === 'All') return -1
       if (right === 'All') return 1
-      return left.localeCompare(right)
+      return compareClassNames(left, right)
     })
   }, [classes])
 
@@ -237,36 +280,20 @@ export function ClassesPage() {
   const openEditModal = (row) => {
     setEditingClass(row)
     clearErrors()
+
+    const matchingSection =
+      row?.sections?.find((section) => String(section?.sectionName ?? '').trim() === String(row?.primarySection ?? '').trim()) ||
+      row?.sections?.[0] ||
+      null
+    const teacherId = matchingSection?.classTeacherId ? String(matchingSection.classTeacherId) : ''
+    const classNumber = extractClassNumber(row?.className)
+
     reset({
-      className: row.className,
-      section: normalizeSectionValue(row.sectionName || row.primarySection),
-      teacherId: row.classTeacherId ?? '',
+      className: classNumber,
+      section: normalizeSectionValue(row?.primarySection || matchingSection?.sectionName),
+      teacherId,
     })
     setModalOpen(true)
-  }
-
-  const closeModal = () => {
-    setModalOpen(false)
-    setEditingClass(null)
-    clearErrors()
-    reset({
-      className: '',
-      section: 'A',
-      teacherId: '',
-    })
-  }
-
-  const buildClassPayload = (values, classNameOverride = '') => {
-    const selectedTeacherId = String(values.teacherId ?? '').trim()
-    const resolvedClassName = String(classNameOverride || values.className || '').trim()
-
-    return {
-      organization_id: organizationId,
-      class_name: resolvedClassName.startsWith('Class ') ? resolvedClassName : `Class ${resolvedClassName}`,
-      section_name: `Section ${String(values.section ?? '').trim()}`,
-      class_teacher_id: selectedTeacherId,
-      teacher_id: selectedTeacherId,
-    }
   }
 
   const onSubmit = async (values) => {
@@ -283,10 +310,27 @@ export function ClassesPage() {
     setError('')
 
     try {
-      await api.post(CREATE_CLASS_API, buildClassPayload(values))
+      const trimmedClassNumber = String(values.className ?? '').trim()
+      const numericClassNumber = trimmedClassNumber.replace(/\D/g, '')
+      const normalizedClassName = numericClassNumber ? `Class ${numericClassNumber}` : ''
+      const normalizedSectionName = `${values.section} Section`
+      const teacherId = values.teacherId ? Number(values.teacherId) : null
 
-      notify('success', 'Saved successfully')
-      closeModal()
+      const response = await api.post(CREATE_CLASS_API, {
+        organization_id: organizationId,
+        class_name: normalizedClassName,
+        section_name: normalizedSectionName,
+        teacher_id: teacherId,
+      })
+
+      notify('success', getApiMessage(response, 'Saved successfully'))
+      setModalOpen(false)
+      setEditingClass(null)
+      reset({
+        className: '',
+        section: 'A',
+        teacherId: '',
+      })
       await fetchClasses()
     } catch (submitError) {
       if (submitError?.response?.status === 409) {
@@ -316,10 +360,39 @@ export function ClassesPage() {
     setError('')
 
     try {
-      await api.put(UPDATE_CLASS_API(editingClass.classId), buildClassPayload(values, editingClass.className))
+      const trimmedClassNumber = String(values.className ?? '').trim()
+      const numericClassNumber = trimmedClassNumber.replace(/\D/g, '')
+      const normalizedClassName = numericClassNumber ? `Class ${numericClassNumber}` : String(editingClass?.className ?? '').trim()
+      const normalizedSectionName = `${normalizeSectionValue(values.section)} Section`
+      const selectedSection =
+        editingClass?.sections?.find((section) => String(section.sectionName) === String(normalizeSectionValue(values.section))) ||
+        editingClass?.sections?.find((section) => String(section.sectionName) === String(editingClass?.primarySection ?? '')) ||
+        editingClass?.sections?.[0] ||
+        null
+      const teacherId = values.teacherId
+        ? Number(values.teacherId)
+        : selectedSection?.classTeacherId
+          ? Number(selectedSection.classTeacherId)
+          : null
+      const nextPayload = {
+        organization_id: organizationId,
+        class_id: editingClass.classId,
+        class_name: normalizedClassName,
+        section_name: normalizedSectionName,
+        section_id: selectedSection?.sectionId ?? null,
+        teacher_id: teacherId,
+      }
 
-      notify('success', 'Saved successfully')
-      closeModal()
+      const response = await api.put(UPDATE_CLASS_API(editingClass.classId), nextPayload)
+
+      notify('success', getApiMessage(response, 'Saved successfully'))
+      setModalOpen(false)
+      setEditingClass(null)
+      reset({
+        className: '',
+        section: 'A',
+        teacherId: '',
+      })
       await fetchClasses()
     } catch (updateError) {
       notify('error', updateError?.response?.data?.message || 'Failed to save class')
@@ -343,11 +416,11 @@ export function ClassesPage() {
     setError('')
 
     try {
-      await api.delete(DELETE_CLASS_API(row.classId))
-      notify('success', 'Deleted successfully')
+      const response = await api.delete(DELETE_CLASS_API(row.classId))
+      notify('success', getApiMessage(response, 'Deleted successfully'))
       await fetchClasses()
     } catch (deleteError) {
-      notify('error', deleteError?.response?.data?.message || 'Failed to delete class')
+      notify('error', getApiMessage(deleteError, 'Failed to delete class'))
     } finally {
       setDeletingId('')
     }
@@ -369,10 +442,9 @@ export function ClassesPage() {
         className: item.className,
         classTeacher: getSectionTeacherLabel(item.sections),
         primarySection: item.sections?.[0]?.sectionName ?? '',
-        sectionName: item.sections?.[0]?.sectionName ?? '',
-        classTeacherId: item.sections?.[0]?.classTeacherId ?? '',
+        sections: item.sections ?? [],
       }))
-      .sort((left, right) => left.className.localeCompare(right.className))
+      .sort((left, right) => compareClassNames(left.className, right.className))
   }, [classFilter, classes, sectionFilter])
 
   const columns = useMemo(
@@ -485,7 +557,10 @@ export function ClassesPage() {
 
       <Modal
         open={modalOpen}
-        onClose={closeModal}
+        onClose={() => {
+          setModalOpen(false)
+          setEditingClass(null)
+        }}
         title={editingClass ? 'Edit Class' : 'Create New Class'}
         description={
           editingClass
@@ -496,62 +571,47 @@ export function ClassesPage() {
         <form onSubmit={handleSubmit(editingClass ? onEditSubmit : onSubmit)} className="grid gap-4 md:grid-cols-2">
           <Input
             label="Class Name"
-            placeholder="Enter class name"
+            placeholder="Enter class number"
             error={errors.className?.message}
             type="number"
-            disabled={Boolean(editingClass)}
+            inputMode="numeric"
+            step="1"
+            min="1"
             {...register('className', {
               required: 'Class name is required',
-              validate: (value) => value.trim().length > 0 || 'Class name is required',
+              validate: (value) => {
+                const normalized = String(value ?? '').trim()
+                return normalized.length > 0 || 'Class name is required'
+              },
             })}
           />
-          <Controller
-            name="section"
-            control={control}
-            rules={{ required: 'Section is required' }}
-            render={({ field }) => (
-              <Select label="Section" error={errors.section?.message} placeholder="Select section" {...field}>
-                {SECTION_OPTIONS.map((section) => (
-                  <option key={section} value={section}>
-                    Section {section}
-                  </option>
-                ))}
-              </Select>
-            )}
-          />
-          <Controller
-            name="teacherId"
-            control={control}
-            rules={{ required: 'Teacher is required' }}
-            render={({ field }) => (
-              <Select
-                label="Teacher"
-                error={errors.teacherId?.message || teacherError || undefined}
-                placeholder={teachersLoading ? 'Loading teachers...' : 'Select teacher'}
-                disabled={teachersLoading || !teachers.length}
-                {...field}
-              >
-                <option value="" disabled>
-                  {teachersLoading ? 'Loading teachers...' : teachers.length ? 'Select teacher' : 'No teachers available'}
-                </option>
-                {teachers.map((teacher) => (
-                  <option key={teacher.id} value={teacher.teacherId ?? teacher.id}>
-                    {teacher.teacher_name}
-                    {teacher.subject ? ` - ${teacher.subject}` : ''}
-                  </option>
-                ))}
-              </Select>
-            )}
-          />
+          <Select label="Section" error={errors.section?.message} {...register('section', { required: 'Section is required' })}>
+            {SECTION_OPTIONS.map((section) => (
+              <option key={section} value={section}>
+                Section {section}
+              </option>
+            ))}
+          </Select>
+          <Select label="Class Teacher" error={errors.teacherId?.message} {...register('teacherId')}>
+            <option value="">Select teacher</option>
+            {teacherOptions.map((teacher) => (
+              <option key={teacher.id} value={teacher.value}>
+                {teacher.label}
+              </option>
+            ))}
+          </Select>
           <div className="md:col-span-2 flex justify-end gap-3">
             <Button
               type="button"
               variant="secondary"
-              onClick={closeModal}
+              onClick={() => {
+                setModalOpen(false)
+                setEditingClass(null)
+              }}
             >
               Cancel
             </Button>
-            <Button type="submit" variant="brand" disabled={saving || teachersLoading || !teachers.length}>
+            <Button type="submit" variant="brand" disabled={saving}>
               {saving ? 'Saving...' : 'Save Class'}
             </Button>
           </div>
