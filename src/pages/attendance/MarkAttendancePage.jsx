@@ -41,7 +41,7 @@ function normalizeAttendanceRow(record, index = 0) {
     className: String(readFirstValue(record, ['class_name', 'className', 'class'])).trim(),
     section: String(readFirstValue(record, ['section_name', 'sectionName', 'section'])).trim(),
     attendanceDate: record?.attendance_date ?? record?.attendanceDate ?? null,
-    status: String(readFirstValue(record, ['status'])).trim().toLowerCase(),
+    status: String(readFirstValue(record, ['status'])).trim(),
     raw: record ?? {},
   }
 }
@@ -148,7 +148,7 @@ export function MarkAttendancePage() {
       return
     }
 
-    if (!selectedClassId || !selectedSectionId) {
+    if (!selectedClassId || !selectedSectionId || !selectedDate) {
       return
     }
 
@@ -156,8 +156,11 @@ export function MarkAttendancePage() {
     setError('')
 
     try {
-      const response = await api.get(
+      const response = await api.post(
         `/attendance/StudentAttendance/${organizationId}/${selectedClassId}/${selectedSectionId}`,
+        {
+          "attendance_date": selectedDate
+        }
       )
 
       if (response?.data?.status === 'error' || response?.status === 'error') {
@@ -170,9 +173,9 @@ export function MarkAttendancePage() {
         const next = {}
 
         normalizedRows.forEach((row) => {
-          next[row.id] = current[row.id] || row.status || 'present'
+          next[row.id] = current[row.id] || row.status || 'Present'
         })
-
+        console.log("normalizedRows===", normalizedRows)
         return next
       })
     } catch (requestError) {
@@ -183,7 +186,7 @@ export function MarkAttendancePage() {
     } finally {
       setLoadingAttendance(false)
     }
-  }, [notify, organizationId, selectedClassId, selectedSectionId])
+  }, [notify, organizationId, selectedDate, selectedClassId, selectedSectionId])
 
   useEffect(() => {
     if (!loadingCatalog) {
@@ -216,11 +219,11 @@ export function MarkAttendancePage() {
         key: 'attendance',
         label: 'Attendance',
         render: (row) => {
-          const selectedStatus = attendanceMap[row.id] || row.status || 'present'
+          const selectedStatus = attendanceMap[row.id] || row.status || 'Present'
 
           return (
             <div className="flex flex-wrap gap-3">
-              {['present', 'absent'].map((option) => {
+              {['Present', 'Absent'].map((option) => {
                 const checked = selectedStatus === option
 
                 return (
@@ -230,7 +233,7 @@ export function MarkAttendancePage() {
                     onClick={() => handleStatusChange(row.id, option)}
                     className={`inline-flex items-center gap-2 rounded-full border px-3 py-2 text-sm font-medium transition ${
                       checked
-                        ? option === 'present'
+                        ? option === 'Present'
                           ? 'border-emerald-200 bg-emerald-50 text-emerald-700 dark:border-emerald-500/30 dark:bg-emerald-500/10 dark:text-emerald-300'
                           : 'border-rose-200 bg-rose-50 text-rose-700 dark:border-rose-500/30 dark:bg-rose-500/10 dark:text-rose-300'
                         : 'border-slate-200 bg-white text-slate-500 hover:border-brand-200 hover:text-brand-700 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-300 dark:hover:border-brand-500/30 dark:hover:text-brand-300'
@@ -239,7 +242,7 @@ export function MarkAttendancePage() {
                     <span className="text-xs uppercase tracking-[0.2em]">{option}</span>
                     <span
                       className={`h-2.5 w-2.5 rounded-full ${
-                        option === 'present' ? 'bg-emerald-500' : 'bg-rose-500'
+                        option === 'Present' ? 'bg-emerald-500' : 'bg-rose-500'
                       }`}
                     />
                   </button>
@@ -296,7 +299,8 @@ export function MarkAttendancePage() {
       return rows
     }
 
-    return rows.filter((row) => String(row.attendanceDate).slice(0, 10) === selectedDate)
+    // return rows.filter((row) => String(row.attendanceDate).slice(0, 10) === selectedDate)
+    return rows
   }, [rows, selectedDate])
 
   const handleSubmit = useCallback(async () => {
@@ -313,7 +317,7 @@ export function MarkAttendancePage() {
     const payload = {
       attendance: visibleRows.map((row) => ({
         student_enroll_id: Number(row.student_enroll_id),
-        status: attendanceMap[row.id] || row.status || 'present',
+        status: attendanceMap[row.id] || row.status || 'Present',
       })),
       organization_id: Number(organizationId),
       teacher_id: selectedTeacherId,
@@ -365,7 +369,9 @@ export function MarkAttendancePage() {
         </div>
 
         <div className="mt-6 grid gap-4 md:grid-cols-3">
-          <Input label="Date" type="date" value={selectedDate} onChange={(event) => setSelectedDate(event.target.value)} />
+          <Input label="Date" type="date" 
+            value={selectedDate} 
+            onChange={(event) => setSelectedDate(event.target.value)} />
           <Select
             label="Class"
             value={selectedClassId}
