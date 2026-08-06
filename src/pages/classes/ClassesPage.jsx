@@ -592,7 +592,14 @@ export function ClassesPage() {
               </option>
             ))}
           </Select>
-          <Select label="Class Teacher" error={errors.teacherId?.message} {...register('teacherId')}>
+          <Select label="Class Teacher" error={errors.teacherId?.message} 
+          {...register('teacherId', {
+              required: 'Class Teacher is required',
+              validate: (value) => {
+                const normalized = String(value ?? '').trim()
+                return normalized.length > 0 || 'Class Teacher is required'
+              },
+            })}>
             <option value="">Select teacher</option>
             {teacherOptions.map((teacher) => (
               <option key={teacher.id} value={teacher.value}>

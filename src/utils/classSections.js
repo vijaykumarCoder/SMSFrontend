@@ -52,7 +52,7 @@ export function getOrganizationId() {
     return ''
   }
 
-  return String(window.localStorage.getItem('DEFAULT_ORGANIZATION_ID') || '').trim()
+  return parseInt(window.localStorage.getItem('DEFAULT_ORGANIZATION_ID') || '')
 }
 
 export async function fetchClassSectionCatalog(organizationId = getOrganizationId()) {
