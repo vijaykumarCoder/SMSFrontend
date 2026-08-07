@@ -169,15 +169,12 @@ export function MarkAttendancePage() {
 
       const normalizedRows = extractAttendanceRows(response).map((record, index) => normalizeAttendanceRow(record, index))
       setRows(normalizedRows)
-      setAttendanceMap((current) => {
-        const next = {}
-
-        normalizedRows.forEach((row) => {
-          next[row.id] = current[row.id] || row.status || 'Present'
-        })
-        console.log("normalizedRows===", normalizedRows)
-        return next
-      })
+      setAttendanceMap(
+        normalizedRows.reduce((next, row) => {
+          next[row.id] = row.status || 'Present'
+          return next
+        }, {}),
+      )
     } catch (requestError) {
       const backendMessage =
         requestError?.response?.data?.message || requestError?.message || 'Failed to load attendance records'
@@ -323,6 +320,7 @@ export function MarkAttendancePage() {
       teacher_id: selectedTeacherId,
       class_id: Number(selectedClassId),
       section_id: Number(selectedSectionId),
+      attendance_date: selectedDate
     }
 
     setSubmitting(true)
