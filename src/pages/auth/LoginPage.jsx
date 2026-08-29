@@ -2,7 +2,7 @@ import { useState } from 'react'
 import { Check, ChevronLeft, Fingerprint, LoaderCircle, LockKeyhole, Mail } from 'lucide-react'
 import { Link, useNavigate } from 'react-router-dom'
 import { Button } from '../../components/ui/Button'
-import { Input } from '../../components/ui/Input'
+import { Input, Select } from '../../components/ui/Input'
 import { Modal } from '../../components/ui/Modal'
 import { AuthShowcase } from './AuthShowcase'
 import api from "../../utils/api";
@@ -17,6 +17,7 @@ function isStrongPassword(value) {
 
 export function LoginPage() {
   const navigate = useNavigate()
+  const [role, setRole] = useState('Admin')
   const [email, setEmail] = useState('')
   const [password, setPassword] = useState('')
   const [error, setError] = useState('')
@@ -30,30 +31,44 @@ export function LoginPage() {
 
   const { login } = useAuth();
 
-const handleSubmit = async (event) => {
-  event.preventDefault()
-  setError('')
-  setIsSubmitting(true)
+  const handleSubmit = async (event) => {
+    event.preventDefault()
+    setError('')
+    setIsSubmitting(true)
 
-  try {
-    const { data } = await api.post("/users/login/", { email, password });
-    const authData = data.data
+    try {
+      const endpoints = {
+        Admin: '/users/login/',
+        Teacher: '/teachers/loginTeacher',
+        Student: '/students/login',
+      }
+      const endpoint = endpoints[role] || endpoints.Admin
 
-    localStorage.setItem("DEFAULT_ORGANIZATION_ID", String(authData.organization_id))
+      const { data } = await api.post(endpoint, { email, password })
+      const authData = data?.data ?? data
+      const accessToken = authData?.access_token ?? authData?.accessToken ?? authData?.token
 
-    const organizationName = authData.organization_name
-    if (organizationName) {
-      localStorage.setItem("DEFAULT_ORGANIZATION_NAME", organizationName)
+      if (!accessToken) {
+        throw new Error('Login response did not include an access token')
+      }
+
+      if (authData?.organization_id) {
+        localStorage.setItem('DEFAULT_ORGANIZATION_ID', String(authData.organization_id))
+      }
+
+      const organizationName = authData.organization_name
+      if (organizationName) {
+        localStorage.setItem('DEFAULT_ORGANIZATION_NAME', organizationName)
+      }
+
+      login(accessToken, authData)
+      navigate('/dashboard', { replace: true })
+    } catch {
+      setError('Invalid credentials')
+    } finally {
+      setIsSubmitting(false)
     }
-
-        login(authData.access_token, authData);
-        navigate('/dashboard', { replace: true })
-  } catch {
-    setError('Invalid credentials')
-  } finally {
-    setIsSubmitting(false)
   }
-}
 
 const handleForgotPasswordSubmit = async (event) => {
   event.preventDefault()
@@ -170,6 +185,16 @@ const closeForgotPasswordModal = () => {
             </p>
 
             <form className="mt-6 space-y-4" onSubmit={handleSubmit}>
+              <Select
+                label="Sign in as"
+                value={role}
+                onChange={(event) => setRole(event.target.value)}
+                placeholder="Choose role"
+              >
+                <option value="Admin">Admin</option>
+                <option value="Teacher">Teacher</option>
+                <option value="Student">Student</option>
+              </Select>
               <Input
                 type="email"
                 icon={Mail}
