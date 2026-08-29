@@ -34,18 +34,10 @@ const DEFAULT_FORM_VALUES = {
   comments: '',
 }
 
-const GET_LEAVES_APIS = (organizationId, userId) => [
-  `/leaves/getAllLeaves/${organizationId}/${userId}`,
-  `/leaves/getAllLeaves/${organizationId}`,
-  `/leaves/getAllLeaves/${userId}`,
-  `/leaves/getLeaveByStudentId/${userId}`,
-  `/leaves/getLeave/${userId}`,
-  '/leaves',
-]
-
 const CREATE_LEAVE_API = '/leaves/createLeave'
 const UPDATE_LEAVE_API = '/leaves/updateLeave'
 const DELETE_LEAVE_API = (leaveId) => `/leaves/${leaveId}`
+const GET_TEACHER_LEAVES_API = '/leaves/getTeacherLeaves'
 
 function normalizeText(value) {
   return String(value ?? '').trim().toLowerCase()
@@ -172,25 +164,6 @@ function getApiMessage(payload, fallback = '') {
   return payload?.data?.message || payload?.message || payload?.response?.data?.message || payload?.response?.message || fallback
 }
 
-async function requestWithFallbacks(requestFactories) {
-  let lastError = null
-
-  for (const createRequest of requestFactories) {
-    try {
-      return await createRequest()
-    } catch (error) {
-      lastError = error
-
-      const status = error?.response?.status
-      if (status && status !== 404 && status !== 405) {
-        throw error
-      }
-    }
-  }
-
-  throw lastError
-}
-
 function extractLeaveRows(response) {
   const candidates = [
     response,
@@ -276,21 +249,36 @@ export function StudentLeaveApplicationPage() {
   }, [])
 
   const fetchLeaves = useCallback(async () => {
+    if (!organizationId) {
+      setLeaves([])
+      setError('Organization id is required to load leaves.')
+      setLoading(false)
+      return
+    }
+
+    if (!userId) {
+      setLeaves([])
+      setError('Teacher id is required to load leaves.')
+      setLoading(false)
+      return
+    }
+
     setLoading(true)
     setError('')
 
     try {
-      const response = await requestWithFallbacks(GET_LEAVES_APIS(organizationId, userId).map((endpoint) => () => api.get(endpoint)))
-      const mappedLeaves = extractLeaveRows(response).map((record, index) => normalizeLeave(record, index))
+      const response = await api.post(GET_TEACHER_LEAVES_API, {
+        organization_id: organizationId,
+        teacher_id: 5,
+      })
 
-      const hasStudentIds = mappedLeaves.some((leave) => Boolean(leave.studentId))
-      const nextLeaves = hasStudentIds && userId ? mappedLeaves.filter((leave) => leave.studentId === userId) : mappedLeaves
+      const mappedLeaves = extractLeaveRows(response).map((record, index) => normalizeLeave(record, index))
 
       if (!isMountedRef.current) {
         return
       }
 
-      setLeaves(nextLeaves)
+      setLeaves(mappedLeaves)
     } catch (fetchError) {
       if (!isMountedRef.current) {
         return
@@ -363,7 +351,7 @@ export function StudentLeaveApplicationPage() {
     ...(editingLeave?.leaveId ? { leave_id: editingLeave.leaveId } : {}),
     ...(editingLeave?.id && !editingLeave?.leaveId ? { id: editingLeave.id } : {}),
     organization_id: organizationId,
-    student_id: 3,
+    teacher_id: 5,
     leave_type: values.leave_type,
     from_date: values.start_date,
     to_date: values.end_date,
