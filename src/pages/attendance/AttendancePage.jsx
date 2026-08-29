@@ -1,12 +1,14 @@
 import { useCallback, useEffect, useMemo, useState } from 'react'
-import { GraduationCap, UserSquare2 } from 'lucide-react'
+import { Check, Edit3, GraduationCap, UserSquare2, X } from 'lucide-react'
 
 import { Badge } from '../../components/ui/Badge'
 import { Button } from '../../components/ui/Button'
 import { Card } from '../../components/ui/Card'
 import { EmptyState } from '../../components/ui/EmptyState'
 import { Input, Select } from '../../components/ui/Input'
+import { Modal } from '../../components/ui/Modal'
 import { Table } from '../../components/ui/Table'
+import { useAuth } from '../../context/AuthContext'
 import { useAppStore } from '../../store/appStore'
 import api from '../../utils/api'
 import { fetchClassSectionCatalog, getOrganizationId } from '../../utils/classSections'
@@ -26,16 +28,81 @@ function readFirstValue(record, keys) {
   return ''
 }
 
-function extractArray(response) {
-  const candidates = [response?.data?.data, response?.data, response]
+function resolveUserId(user) {
+  const candidates = [
+    user?.user_id,
+    user?.userId,
+    user?.id,
+    user?.sub,
+    user?.user?.id,
+    user?.user?.user_id,
+    user?.data?.id,
+    user?.data?.user_id,
+  ]
 
-  for (const candidate of candidates) {
-    if (Array.isArray(candidate)) {
-      return candidate
-    }
+  const match = candidates.find((value) => String(value ?? '').trim() !== '')
+  return String(match ?? '').trim()
+}
+
+function extractLeaveDetailsResponse(response) {
+  const data = response?.data?.data ?? response?.data ?? response ?? {}
+  return {
+    students: Array.isArray(data.students) ? data.students : [],
+    teachers: Array.isArray(data.teachers) ? data.teachers : [],
+  }
+}
+
+function normalizeLeaveStatus(status) {
+  const normalized = normalizeComparable(status)
+
+  if (normalized.includes('approve')) {
+    return 'APPROVED'
   }
 
-  return []
+  if (normalized.includes('reject')) {
+    return 'REJECTED'
+  }
+
+  if (normalized.includes('pending')) {
+    return 'PENDING'
+  }
+
+  return String(status ?? '').trim().toUpperCase()
+}
+
+function getLeaveStatusTone(status) {
+  const normalized = normalizeComparable(status)
+
+  if (!normalized) {
+    return 'neutral'
+  }
+
+  if (normalized.includes('pending')) {
+    return 'warning'
+  }
+
+  if (normalized.includes('approve')) {
+    return 'success'
+  }
+
+  if (normalized.includes('reject')) {
+    return 'danger'
+  }
+
+  return 'info'
+}
+
+function formatStatusLabel(status) {
+  const normalized = String(status ?? '').trim()
+  if (!normalized) {
+    return '-'
+  }
+
+  return normalized
+    .toLowerCase()
+    .replace(/[_-]+/g, ' ')
+    .replace(/\s+/g, ' ')
+    .replace(/\b\w/g, (char) => char.toUpperCase())
 }
 
 function normalizeComparable(value) {
@@ -50,6 +117,14 @@ function normalizeTeacherLeave(record, index = 0) {
     teacher_id: teacherId,
     teacher_name: String(readFirstValue(record, ['teacher_name', 'teacherName', 'name'])).trim(),
     employee_id: String(readFirstValue(record, ['employee_id', 'employeeId'])).trim(),
+    leave_id: record?.leave_id ?? record?.leaveId ?? null,
+    leave_type: String(readFirstValue(record, ['leave_type', 'leaveType'])).trim(),
+    from_date: String(readFirstValue(record, ['from_date', 'fromDate'])).trim(),
+    to_date: String(readFirstValue(record, ['to_date', 'toDate'])).trim(),
+    start_session: String(readFirstValue(record, ['start_session', 'startSession'])).trim(),
+    end_session: String(readFirstValue(record, ['end_session', 'endSession'])).trim(),
+    leave_status: String(readFirstValue(record, ['leave_status', 'leaveStatus', 'status'])).trim(),
+    reason: String(readFirstValue(record, ['reason', 'remarks', 'comment'])).trim(),
   }
 }
 
@@ -64,13 +139,23 @@ function normalizeStudentLeave(record, index = 0) {
     roll_number: String(readFirstValue(record, ['roll_number', 'rollNumber', 'roll_no'])).trim(),
     className: String(readFirstValue(record, ['class_name', 'className'])).trim(),
     section: String(readFirstValue(record, ['section_name', 'sectionName', 'section'])).trim(),
+    leave_id: record?.leave_id ?? record?.leaveId ?? null,
+    leave_type: String(readFirstValue(record, ['leave_type', 'leaveType'])).trim(),
+    from_date: String(readFirstValue(record, ['from_date', 'fromDate'])).trim(),
+    to_date: String(readFirstValue(record, ['to_date', 'toDate'])).trim(),
+    start_session: String(readFirstValue(record, ['start_session', 'startSession'])).trim(),
+    end_session: String(readFirstValue(record, ['end_session', 'endSession'])).trim(),
+    leave_status: String(readFirstValue(record, ['leave_status', 'leaveStatus', 'status'])).trim(),
+    reason: String(readFirstValue(record, ['reason', 'remarks', 'comment'])).trim(),
   }
 }
 
-function extractStudentLeaveRows(response) {
-  const roots = [response?.data?.data, response?.data, response]
+function extractStudentLeaveRows(groups) {
+  if (!Array.isArray(groups)) {
+    return []
+  }
 
-  const flattenGroup = (group) => {
+  return groups.flatMap((group) => {
     if (!group || typeof group !== 'object') {
       return []
     }
@@ -110,25 +195,7 @@ function extractStudentLeaveRows(response) {
     }
 
     return []
-  }
-
-  for (const root of roots) {
-    if (Array.isArray(root)) {
-      if (root.some((item) => Array.isArray(item?.sections) || Array.isArray(item?.students))) {
-        return root.flatMap(flattenGroup)
-      }
-
-      return root
-    }
-
-    if (root && typeof root === 'object') {
-      if (Array.isArray(root.sections) || Array.isArray(root.students)) {
-        return flattenGroup(root)
-      }
-    }
-  }
-
-  return []
+  })
 }
 
 function CountLine({ present, leave }) {
@@ -207,6 +274,7 @@ function LeaveSection({
 }
 
 export function AttendancePage() {
+  const { user } = useAuth()
   const students = useAppStore((state) => state.students)
   const teachers = useAppStore((state) => state.teachers)
 
@@ -216,14 +284,17 @@ export function AttendancePage() {
   const [sectionFilter, setSectionFilter] = useState('All')
   const [teachersOnLeave, setTeachersOnLeave] = useState([])
   const [studentsOnLeave, setStudentsOnLeave] = useState([])
-  const [teacherLoading, setTeacherLoading] = useState(true)
   const [catalogLoading, setCatalogLoading] = useState(true)
-  const [studentLoading, setStudentLoading] = useState(true)
-  const [teacherError, setTeacherError] = useState('')
-  const [studentError, setStudentError] = useState('')
+  const [leaveLoading, setLeaveLoading] = useState(true)
+  const [leaveError, setLeaveError] = useState('')
   const [notification, setNotification] = useState(null)
+  const [actionModalOpen, setActionModalOpen] = useState(false)
+  const [actionLeave, setActionLeave] = useState(null)
+  const [actionReason, setActionReason] = useState('')
+  const [updatingLeaveId, setUpdatingLeaveId] = useState('')
 
   const organizationId = useMemo(() => getOrganizationId(), [])
+  const loggedInUserId = useMemo(() => resolveUserId(user), [user])
 
   useEffect(() => {
     if (!notification) {
@@ -241,13 +312,13 @@ export function AttendancePage() {
   const fetchCatalog = useCallback(async () => {
     if (!organizationId) {
       setCatalog([])
-      setStudentError('Organization id is required to load student leave filters.')
+      setLeaveError('Organization id is required to load student leave filters.')
       setCatalogLoading(false)
       return
     }
 
     setCatalogLoading(true)
-    setStudentError('')
+    setLeaveError('')
 
     try {
       const rows = await fetchClassSectionCatalog(organizationId)
@@ -255,98 +326,119 @@ export function AttendancePage() {
     } catch (requestError) {
       const backendMessage =
         requestError?.response?.data?.message || requestError?.message || 'Failed to load student leave filters'
-      setStudentError(backendMessage)
+      setLeaveError(backendMessage)
       notify('error', backendMessage)
     } finally {
       setCatalogLoading(false)
     }
   }, [notify, organizationId])
 
-  const fetchTeachersOnLeave = useCallback(async () => {
+  const fetchLeaveDetails = useCallback(async () => {
     if (!organizationId) {
       setTeachersOnLeave([])
-      setTeacherError('Organization id is required to load teachers on leave.')
-      setTeacherLoading(false)
-      return
-    }
-
-    setTeacherLoading(true)
-    setTeacherError('')
-
-    try {
-      // const response = await api.get(`/attendance/teachers/${organizationId}`)
-      const response = {
-        "status": "success",
-        "message": "Teachers on leave fetched successfully",
-        "data": [
-          {
-            "teacher_id": 1,
-            "employee_id": "EMP001",
-            "teacher_name": "James Hall"
-          },
-          {
-            "teacher_id": 2,
-            "employee_id": "EMP002",
-            "teacher_name": "Emma Wright"
-          }
-          // },
-          // {
-          //   "teacher_id": 3,
-          //   "employee_id": "EMP003",
-          //   "teacher_name": "Wick"
-          // },
-          // {
-          //   "teacher_id": 4,
-          //   "employee_id": "EMP004",
-          //   "teacher_name": "Jhon"
-          // }
-        ]
-      }
-      const rows = extractArray(response).map((record, index) => normalizeTeacherLeave(record, index))
-      setTeachersOnLeave(rows)
-    } catch (requestError) {
-      const backendMessage =
-        requestError?.response?.data?.message || requestError?.message || 'Failed to load teachers on leave'
-      setTeacherError(backendMessage)
-      notify('error', backendMessage)
-    } finally {
-      setTeacherLoading(false)
-    }
-  }, [notify, organizationId])
-
-  const fetchStudentsOnLeave = useCallback(async () => {
-    if (!organizationId) {
       setStudentsOnLeave([])
-      setStudentError('Organization id is required to load student leave records.')
-      setStudentLoading(false)
+      setLeaveError('Organization id is required to load leave details.')
+      setLeaveLoading(false)
       return
     }
 
-    setStudentLoading(true)
-    setStudentError('')
+    setLeaveLoading(true)
+    setLeaveError('')
 
     try {
-      const response = await api.get(
-        `/students/getStudentOnLeave/${organizationId}`,
-      )
+      const response = await api.post('/students/getLeaveDetails', {
+        organization_id: organizationId,
+        leave_date: selectedDate,
+      })
 
-      const rows = extractStudentLeaveRows(response).map((record, index) => normalizeStudentLeave(record, index))
-      setStudentsOnLeave(rows)
+      const { students, teachers } = extractLeaveDetailsResponse(response)
+      const teacherRows = teachers.map((record, index) => normalizeTeacherLeave(record, index))
+      const studentRows = extractStudentLeaveRows(students).map((record, index) => normalizeStudentLeave(record, index))
+
+      setTeachersOnLeave(teacherRows)
+      setStudentsOnLeave(studentRows)
     } catch (requestError) {
       const backendMessage =
-        requestError?.response?.data?.message || requestError?.message || 'Failed to load students on leave'
-      setStudentError(backendMessage)
+        requestError?.response?.data?.message || requestError?.message || 'Failed to load leave details'
+      setLeaveError(backendMessage)
       notify('error', backendMessage)
     } finally {
-      setStudentLoading(false)
+      setLeaveLoading(false)
     }
-  }, [notify, organizationId])
+  }, [notify, organizationId, selectedDate])
+
+  const openActionModal = useCallback((leave) => {
+    setActionLeave(leave)
+    setActionReason('')
+    setActionModalOpen(true)
+  }, [])
+
+  const closeActionModal = useCallback(() => {
+    setActionModalOpen(false)
+    setActionLeave(null)
+    setActionReason('')
+  }, [])
+
+  const updateLeaveStatus = useCallback(
+    async (leave, status, remarks) => {
+      const leaveId = leave?.leave_id ?? leave?.leaveId ?? leave?.id
+
+      if (!leaveId) {
+        notify('error', 'Unable to update this leave request.')
+        return
+      }
+
+      if (!loggedInUserId) {
+        notify('error', 'Unable to determine the logged-in user.')
+        return
+      }
+
+      setUpdatingLeaveId(leaveId)
+
+      try {
+        const response = await api.put('/leaves/ApproveLeave', {
+          leave_id: leaveId,
+          approved_by_teacher_id: loggedInUserId,
+          approved_by_user_id: loggedInUserId,
+          status,
+          remarks: remarks?.trim() || '',
+        })
+
+        notify('success', response?.data?.message || `Leave ${status.toLowerCase()} successfully`)
+        closeActionModal()
+        await fetchLeaveDetails()
+      } catch (requestError) {
+        const backendMessage =
+          requestError?.response?.data?.message || requestError?.message || 'Failed to update leave status'
+        notify('error', backendMessage)
+      } finally {
+        setUpdatingLeaveId('')
+      }
+    },
+    [closeActionModal, fetchLeaveDetails, loggedInUserId, notify],
+  )
+
+  const submitLeaveAction = useCallback(
+    (status) => {
+      if (!actionLeave) {
+        notify('error', 'No leave request selected.')
+        return
+      }
+
+      if (!actionReason.trim()) {
+        notify('error', 'Please enter a reason before continuing.')
+        return
+      }
+
+      updateLeaveStatus(actionLeave, status, actionReason)
+    },
+    [actionLeave, actionReason, notify, updateLeaveStatus],
+  )
 
   useEffect(() => {
-    fetchTeachersOnLeave()
+    fetchLeaveDetails()
     fetchCatalog()
-    fetchStudentsOnLeave()
-  }, [fetchCatalog, fetchStudentsOnLeave, fetchTeachersOnLeave])
+  }, [fetchCatalog, fetchLeaveDetails])
 
   useEffect(() => {
     if (classFilter === 'All') {
@@ -394,6 +486,7 @@ export function AttendancePage() {
 
   const teacherColumns = useMemo(
     () => [
+      { key: 'teacher_id', label: 'ID' },
       {
         key: 'teacher_name',
         label: 'Name',
@@ -403,14 +496,49 @@ export function AttendancePage() {
           </div>
         ),
       },
-      { key: 'employee_id', label: 'Employee ID' },
+      // { key: 'from_date', label: 'Start Date' },
+      // { key: 'start_session', label: 'Start Date' },
+      // { key: 'to_date', label: 'End Date' },
+      // { key: 'end_session', label: 'End Date' },
+      // {
+      //   key: 'status',
+      //   label: 'Status',
+      //   render: (row) => <Badge tone="warning">{row.leave_status}</Badge>,
+      // },
+      { key: 'from_date', label: 'Start Date' },
+      { key: 'start_session', label: 'Session' },
+      { key: 'to_date', label: 'End Date' },
+      { key: 'end_session', label: 'Session' },
+      { key: 'reason', label: 'Reason' },
       {
         key: 'status',
         label: 'Status',
-        render: () => <Badge tone="warning">On Leave</Badge>,
-      },
+        render: (row) => {
+          const status = normalizeLeaveStatus(row.leave_status || row.status || 'PENDING')
+          const isPending = status === 'PENDING'
+
+          return (
+            <div className="flex flex-col gap-2">
+              <Badge tone={getLeaveStatusTone(status)}>{formatStatusLabel(status)}</Badge>
+              {isPending ? (
+                <Button
+                  type="button"
+                  variant="secondary"
+                  size="sm"
+                  onClick={() => openActionModal(row)}
+                  disabled={updatingLeaveId === row.leave_id}
+                  className="w-fit"
+                >
+                  <Edit3 size={14} />
+                  Edit
+                </Button>
+              ) : null}
+            </div>
+          )
+        },
+      }
     ],
-    [],
+    [openActionModal, updatingLeaveId],
   )
 
   const studentColumns = useMemo(
@@ -424,15 +552,42 @@ export function AttendancePage() {
           </div>
         ),
       },
-      { key: 'admission_no', label: 'Admission No' },
-      { key: 'roll_number', label: 'Roll Number' },
+      { key: 'admission_no', label: 'Adm.No' },
+      { key: 'roll_number', label: 'Ro.No' },
+      { key: 'from_date', label: 'Start Date' },
+      { key: 'start_session', label: 'Session' },
+      { key: 'to_date', label: 'End Date' },
+      { key: 'end_session', label: 'Session' },
+      { key: 'reason', label: 'Reason' },
       {
         key: 'status',
         label: 'Status',
-        render: () => <Badge tone="warning">On Leave</Badge>,
-      },
+        render: (row) => {
+          const status = normalizeLeaveStatus(row.leave_status || row.status || 'PENDING')
+          const isPending = status === 'PENDING'
+
+          return (
+            <div className="flex flex-col gap-2">
+              <Badge tone={getLeaveStatusTone(status)}>{formatStatusLabel(status)}</Badge>
+              {isPending ? (
+                <Button
+                  type="button"
+                  variant="secondary"
+                  size="sm"
+                  onClick={() => openActionModal(row)}
+                  disabled={updatingLeaveId === row.leave_id}
+                  className="w-fit"
+                >
+                  <Edit3 size={14} />
+                  Edit
+                </Button>
+              ) : null}
+            </div>
+          )
+        },
+      }
     ],
-    [],
+    [openActionModal, updatingLeaveId],
   )
 
   const teacherTotalCount = teachers.length
@@ -493,7 +648,7 @@ export function AttendancePage() {
     </>
   )
 
-  const isStudentSectionLoading = catalogLoading || studentLoading
+  const isStudentSectionLoading = catalogLoading || leaveLoading
 
   return (
     <div className="page-shell">
@@ -538,12 +693,12 @@ export function AttendancePage() {
             rows={teachersOnLeave}
             columns={teacherColumns}
             counts={{ present: teacherPresentCount, leave: teacherLeaveCount }}
-            loading={teacherLoading}
-            error={teacherError}
+            loading={leaveLoading}
+            error={leaveError}
             emptyTitle="No teachers on leave"
             emptyDescription={`No teachers are on leave for ${selectedDate}.`}
             retryLabel="Retry"
-            onRetry={fetchTeachersOnLeave}
+            onRetry={fetchLeaveDetails}
           />
 
           <LeaveSection
@@ -554,15 +709,72 @@ export function AttendancePage() {
             columns={studentColumns}
             counts={{ present: studentPresentCount, leave: studentLeaveCount }}
             loading={isStudentSectionLoading}
-            error={studentError}
+            error={leaveError}
             emptyTitle="No students on leave"
             emptyDescription="No student leave records were returned for the selected filters."
             retryLabel="Retry"
-            onRetry={catalog.length ? fetchStudentsOnLeave : fetchCatalog}
+            onRetry={catalog.length ? fetchLeaveDetails : fetchCatalog}
             controls={studentControls}
           />
         </div>
       </Card>
+
+      <Modal
+        open={actionModalOpen}
+        onClose={closeActionModal}
+        title="Review Pending Leave"
+        description="Add a reason, then choose whether to approve or reject the leave request."
+      >
+        <div className="space-y-4">
+          <div className="rounded-2xl bg-slate-50 p-4 text-sm text-slate-600 dark:bg-slate-900/60 dark:text-slate-300">
+            <p className="font-medium text-slate-900 dark:text-white">
+              {actionLeave?.student_name || actionLeave?.teacher_name || 'Selected leave'}
+            </p>
+            <p className="mt-1">
+              Pending leave from {actionLeave?.from_date || '-'} to {actionLeave?.to_date || '-'}
+            </p>
+          </div>
+
+          <label className="block space-y-2">
+            <span className="text-sm font-medium text-slate-700 dark:text-slate-200">Reason</span>
+            <textarea
+              value={actionReason}
+              onChange={(event) => setActionReason(event.target.value)}
+              rows={4}
+              placeholder="Enter the reason for this action"
+              className="min-h-[120px] w-full rounded-2xl border border-slate-200 bg-white px-4 py-3 text-sm text-slate-700 shadow-sm outline-none transition placeholder:text-slate-400 focus:border-brand-400 focus:ring-2 focus:ring-brand-100 dark:border-slate-700 dark:bg-slate-950 dark:text-slate-200 dark:focus:ring-brand-500/20"
+            />
+          </label>
+
+          <div className="flex justify-end gap-3">
+            <Button type="button" variant="secondary" onClick={closeActionModal}>
+              Cancel
+            </Button>
+            <Button
+              type="button"
+              variant="danger"
+              onClick={() => submitLeaveAction('REJECTED')}
+              disabled={updatingLeaveId === (actionLeave?.leave_id ?? actionLeave?.leaveId ?? actionLeave?.id)}
+            >
+              <X size={16} />
+              {updatingLeaveId === (actionLeave?.leave_id ?? actionLeave?.leaveId ?? actionLeave?.id)
+                ? 'Saving...'
+                : 'Reject Leave'}
+            </Button>
+            <Button
+              type="button"
+              variant="brand"
+              onClick={() => submitLeaveAction('APPROVED')}
+              disabled={updatingLeaveId === (actionLeave?.leave_id ?? actionLeave?.leaveId ?? actionLeave?.id)}
+            >
+              <Check size={16} />
+              {updatingLeaveId === (actionLeave?.leave_id ?? actionLeave?.leaveId ?? actionLeave?.id)
+                ? 'Saving...'
+                : 'Approve Leave'}
+            </Button>
+          </div>
+        </div>
+      </Modal>
     </div>
   )
 }
