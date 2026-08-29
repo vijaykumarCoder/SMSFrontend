@@ -4,14 +4,55 @@ import { useAppStore } from '../../store/appStore'
 import { Button } from '../ui/Button'
 import { useAuth } from '../../context/AuthContext'
 
+function getDisplayName(user) {
+  return (
+    String(
+      user?.name ??
+        user?.full_name ??
+        user?.fullName ??
+        user?.username ??
+        user?.user_name ??
+        user?.email ??
+        'User',
+    ).trim() || 'User'
+  )
+}
+
+function getDisplayRole(user) {
+  return (
+    String(
+      user?.role ??
+        user?.user_role ??
+        user?.userRole ??
+        user?.account_type ??
+        user?.type ??
+        '',
+    ).trim() || 'Member'
+  )
+}
+
+function getAvatarInitials(name) {
+  const initials = name
+    .split(/\s+/)
+    .filter(Boolean)
+    .slice(0, 2)
+    .map((part) => part[0]?.toUpperCase())
+    .join('')
+
+  return initials || 'U'
+}
+
 export function Navbar() {
   const navigate = useNavigate()
   const theme = useAppStore((state) => state.theme)
   const toggleTheme = useAppStore((state) => state.toggleTheme)
   const toggleMobileSidebar = useAppStore((state) => state.toggleMobileSidebar)
 
-  const { logout } = useAuth();
-  
+  const { logout, user } = useAuth()
+  const displayName = getDisplayName(user)
+  const displayRole = getDisplayRole(user)
+  const avatarInitials = getAvatarInitials(displayName)
+
   const handleLogout = () => {
     // clearAuth()
     logout()
@@ -54,11 +95,11 @@ export function Navbar() {
           <div className="mx-1 hidden h-8 w-px bg-slate-200/80 dark:bg-slate-700 sm:block" />
           <div className="flex min-w-0 items-center gap-2 rounded-full pl-1 sm:gap-3">
             <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-[linear-gradient(135deg,#fde68a,#0ea5e9)] text-xs font-semibold text-slate-900">
-              PL
+              {avatarInitials}
             </div>
             <div className="hidden text-left sm:block">
-              <p className="text-sm font-semibold leading-none">Priscilla Lily</p>
-              <p className="mt-1 text-xs text-slate-500 dark:text-slate-400">Admin</p>
+              <p className="text-sm font-semibold leading-none">{displayName}</p>
+              <p className="mt-1 text-xs text-slate-500 dark:text-slate-400">{displayRole}</p>
             </div>
             <button className="hidden h-8 w-8 shrink-0 items-center justify-center rounded-full text-slate-500 transition hover:bg-slate-100 hover:text-slate-900 dark:text-slate-400 dark:hover:bg-slate-800 dark:hover:text-white sm:flex">
               <ChevronDown size={16} />
@@ -69,4 +110,3 @@ export function Navbar() {
     </header>
   )
 }
- 

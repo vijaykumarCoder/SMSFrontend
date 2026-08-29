@@ -313,7 +313,7 @@ export function ClassesPage() {
       const trimmedClassNumber = String(values.className ?? '').trim()
       const numericClassNumber = trimmedClassNumber.replace(/\D/g, '')
       const normalizedClassName = numericClassNumber ? `Class ${numericClassNumber}` : ''
-      const normalizedSectionName = `${values.section} Section`
+      const normalizedSectionName = `Section ${values.section}`
       const teacherId = values.teacherId ? Number(values.teacherId) : null
 
       const response = await api.post(CREATE_CLASS_API, {

@@ -69,6 +69,59 @@ function parseJwt(token) {
   }
 }
 
+function normalizeUser(userData) {
+  if (!userData || typeof userData !== 'object') {
+    return null;
+  }
+
+  const candidates = [
+    userData,
+    userData.user,
+    userData.data,
+    userData.profile,
+  ].filter((candidate) => candidate && typeof candidate === 'object');
+
+  const source =
+    candidates.find(
+      (candidate) =>
+        candidate.name ||
+        candidate.full_name ||
+        candidate.fullName ||
+        candidate.username ||
+        candidate.user_name ||
+        candidate.email ||
+        candidate.role ||
+        candidate.user_role ||
+        candidate.userRole ||
+        candidate.account_type ||
+        candidate.type,
+    ) ?? userData;
+
+  const name =
+    source.name ??
+    source.full_name ??
+    source.fullName ??
+    source.username ??
+    source.user_name ??
+    source.email ??
+    '';
+
+  const role =
+    source.role ??
+    source.user_role ??
+    source.userRole ??
+    source.account_type ??
+    source.type ??
+    '';
+
+  return {
+    ...userData,
+    ...(source !== userData ? source : null),
+    name: String(name).trim(),
+    role: String(role).trim(),
+  };
+}
+
 export function AuthProvider({ children }) {
   const [accessToken, setAccessToken] = useState(null);
   const [user, setUser]               = useState(null);
@@ -90,7 +143,7 @@ export function AuthProvider({ children }) {
         const data = await response.json();
         setToken(data.access_token);
         setAccessToken(data.access_token);
-        setUser(parseJwt(data.access_token));
+            setUser(normalizeUser(parseJwt(data.access_token)));
       } catch {
         // Refresh token expired or doesn't exist → user needs to login
         clearToken();
@@ -105,10 +158,10 @@ export function AuthProvider({ children }) {
     restoreSession();
   }, []);
 
-  const login = useCallback((token) => {
+  const login = useCallback((token, userData = null) => {
     setToken(token);
     setAccessToken(token);
-    setUser(parseJwt(token));
+    setUser(normalizeUser(userData) ?? normalizeUser(parseJwt(token)));
   }, []);
 
   const logout = useCallback(async () => {
