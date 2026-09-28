@@ -14,8 +14,7 @@ const DEFAULT_ORGANIZATION_ID = localStorage.getItem("DEFAULT_ORGANIZATION_ID")
 const CREATE_TEACHER_API = '/teachers/createTeacher'
 const GET_TEACHERS_APIS = [
   `/teachers/getAllTeachers/${DEFAULT_ORGANIZATION_ID}`,
-  `/teachers/getAllTeachers${DEFAULT_ORGANIZATION_ID}`,
-  `/teachers/getAllTeachers?organization_id=${DEFAULT_ORGANIZATION_ID}`,
+  // `/teachers/getAllTeachers/organization_id${DEFAULT_ORGANIZATION_ID}`,
 ]
 const UPDATE_TEACHER_API = '/teachers/updateTeacher'
 const DELETE_TEACHER_API = (teacherId) => `/teachers/deleteTeacher/${teacherId}`
