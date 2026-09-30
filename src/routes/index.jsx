@@ -1,7 +1,7 @@
 import { BrowserRouter, Routes, Route, Navigate } from "react-router-dom";
 import { useEffect } from "react";
 
-import { ProtectedRoute } from "./ProtectedRoute";
+import { ProtectedRoute, RoleRoute } from "./ProtectedRoute";
 import { PublicRoute }    from "./PublicRoute";
 
 import { MainLayout } from '../components/layout/MainLayout'
@@ -58,8 +58,8 @@ export function AppRouter() {
         <Route path="/signup" element={<PublicRoute><SignupPage /></PublicRoute>} />
 
         {/* ── Standalone protected routes (no MainLayout) ─────────── */}
-        <Route path="/student-registration" element={<StudentRegistration />} />
-        <Route path="/school-registration"  element={<SchoolRegistration />} />
+        <Route path="/student-registration" element={<ProtectedRoute><RoleRoute><StudentRegistration /></RoleRoute></ProtectedRoute>} />
+        <Route path="/school-registration"  element={<ProtectedRoute><RoleRoute><SchoolRegistration /></RoleRoute></ProtectedRoute>} />
 
         {/* ── Main app shell (sidebar + header layout) ────────────── */}
         <Route element={<ProtectedRoute><MainLayout /></ProtectedRoute>}>

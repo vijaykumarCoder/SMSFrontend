@@ -46,7 +46,7 @@ const handleSubmit = async (event) => {
       localStorage.setItem("DEFAULT_ORGANIZATION_NAME", organizationName)
     }
 
-    login(authData.access_token);
+    login(authData);
     navigate('/dashboard', { replace: true })
   } catch {
     setError('Invalid credentials')

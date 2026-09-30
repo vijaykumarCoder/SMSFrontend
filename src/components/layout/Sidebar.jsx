@@ -3,6 +3,7 @@ import { NavLink } from 'react-router-dom'
 import { useAppStore } from '../../store/appStore'
 import { cn } from '../../utils/helpers'
 import { navigationItems } from '../../utils/mockData'
+import { useAuth } from '../../context/AuthContext'
 
 export function Sidebar({ collapsed }) {
   const toggleSidebar = useAppStore((state) => state.toggleSidebar)
@@ -10,6 +11,13 @@ export function Sidebar({ collapsed }) {
   const closeMobileSidebar = useAppStore((state) => state.closeMobileSidebar)
   const desktopCollapsed = collapsed
   const organizationName = typeof window === 'undefined' ? '' : window.localStorage.getItem('DEFAULT_ORGANIZATION_NAME')
+  const { user } = useAuth()
+  const role = String(user?.role || '').toLowerCase()
+  const visibleItems = navigationItems.filter((item) => {
+    if (role === 'student') return ['/dashboard', '/student-leave-application'].includes(item.path)
+    if (role === 'teacher') return !['/classes', '/registered-students', '/teachers'].includes(item.path)
+    return true
+  })
 
   return (
     <>
@@ -53,7 +61,7 @@ export function Sidebar({ collapsed }) {
         </div>
 
         <nav className="scrollbar-hidden flex-1 space-y-2 overflow-y-auto pr-1">
-          {navigationItems.map((item) => {
+          {visibleItems.map((item) => {
             const Icon = item.icon
 
             return (
