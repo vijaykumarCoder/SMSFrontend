@@ -70,10 +70,14 @@ export function StudentRegistration() {
 
   const onSubmit = async (data) => {
     try {
+      const trimmedClassNumber = String(data.class_name ?? '').trim()
+      const numericClassNumber = trimmedClassNumber.replace(/\D/g, '')
+      const normalizedClassName = numericClassNumber ? `Class ${numericClassNumber}` : ''
+
       const payload = {
         organization_id: DEFAULT_ORGANIZATION_ID,
         student_name: data.full_name.trim(),
-        class_name: data.class_name.trim(),
+        class_name: normalizedClassName,
         father_name: data.father_name.trim(),
         father_phone_number: data.phone_number.trim(),
         emergency_name:
@@ -218,9 +222,18 @@ export function StudentRegistration() {
 
                 <Input
                   label="Class"
+                  placeholder="Enter class number"
                   error={errors.class_name?.message}
+                  type="number"
+                  inputMode="numeric"
+                  step="1"
+                  min="1"
                   {...register('class_name', {
                     required: 'Class is required',
+                    validate: (value) => {
+                      const normalized = String(value ?? '').trim()
+                      return normalized.length > 0 || 'Class is required'
+                    },
                   })}
                 />
 

@@ -105,7 +105,7 @@ export function SignupPage() {
             <h1 className="mt-4 text-3xl font-semibold tracking-tight text-slate-900 sm:text-4xl xl:text-5xl">
               Create your
               <br />
-              school account
+               account
             </h1>
             <p className="mt-3 text-sm leading-6 text-slate-500">
               Create a principal account for your organization and start managing school operations securely.

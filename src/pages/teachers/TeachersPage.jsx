@@ -17,11 +17,12 @@ const GET_TEACHERS_APIS = [
   `/teachers/getAllTeachers${DEFAULT_ORGANIZATION_ID}`,
   `/teachers/getAllTeachers?organization_id=${DEFAULT_ORGANIZATION_ID}`,
 ]
-const UPDATE_TEACHER_API = (teacherId) => `/teachers/updateTeacher/${teacherId}`
+const UPDATE_TEACHER_API = '/teachers/updateTeacher'
 const DELETE_TEACHER_API = (teacherId) => `/teachers/deleteTeacher/${teacherId}`
 
 const formDefaults = {
   teacher_name: '',
+  email: '',
   phone_number: '',
   status: 'Contract',
   type: 'Full',
@@ -51,7 +52,9 @@ function normalizeTeacher(record, index = 0) {
     teacherId: record?.teacher_id ?? record?.id ?? record?._id ?? null,
     organization_id: Number(readFirstValue(record, ['organization_id', 'organizationId'])) || DEFAULT_ORGANIZATION_ID,
     teacher_name: String(readFirstValue(record, ['teacher_name', 'teacherName', 'name'])).trim(),
+    email: String(readFirstValue(record, ['email', 'teacher_email', 'teacherEmail'])).trim(),
     phone_number: String(readFirstValue(record, ['phone_number', 'phoneNumber', 'contact'])).trim(),
+    password: String(readFirstValue(record, ['password', 'password', 'contact'])).trim(),
     status: String(readFirstValue(record, ['status'])).trim(),
     type: String(readFirstValue(record, ['type'])).trim(),
     subject: String(readFirstValue(record, ['subject'])).trim(),
@@ -84,6 +87,10 @@ function extractTeacherRows(response) {
 
 function normalizeText(value) {
   return String(value ?? '').trim().toLowerCase()
+}
+
+function getApiMessage(payload, fallback = '') {
+  return payload?.data?.message || payload?.message || payload?.response?.data?.message || payload?.response?.message || fallback
 }
 
 function getStatusTone(status) {
@@ -142,6 +149,7 @@ const columns = [
     render: (row) => `${row.years_of_experience || 0} years`,
   },
   { key: 'phone_number', label: 'Phone' },
+  { key: 'password', label: 'Password' },
   {
     key: 'status',
     label: 'Status',
@@ -234,6 +242,7 @@ export function TeachersPage() {
 
         const searchableValues = [
           teacher.teacher_name,
+          teacher.email,
           teacher.phone_number,
           teacher.subject,
           teacher.type,
@@ -258,6 +267,7 @@ export function TeachersPage() {
     clearErrors()
     reset({
       teacher_name: teacher.teacher_name ?? '',
+      email: teacher.email ?? '',
       phone_number: teacher.phone_number ?? '',
       status: teacher.status || 'Contract',
       type: teacher.type || 'Full',
@@ -280,6 +290,7 @@ export function TeachersPage() {
   const buildPayload = (values) => ({
     organization_id: DEFAULT_ORGANIZATION_ID,
     teacher_name: values.teacher_name.trim(),
+    email: values.email.trim().toLowerCase(),
     phone_number: values.phone_number.trim(),
     status: values.status,
     type: values.type,
@@ -297,14 +308,14 @@ export function TeachersPage() {
       const payload = buildPayload(values)
 
       if (editingTeacher?.teacherId) {
-        await requestWithFallbacks([
-          () => api.put(UPDATE_TEACHER_API(editingTeacher.teacherId), payload),
-          () => api.put(`/teachers/${editingTeacher.teacherId}`, payload),
-        ])
-        notify('success', 'Teacher updated successfully')
+        const response = await api.put(UPDATE_TEACHER_API, {
+          teacher_id: editingTeacher.teacherId,
+          ...payload,
+        })
+        notify('success', getApiMessage(response, 'Teacher updated successfully'))
       } else {
-        await api.post(CREATE_TEACHER_API, payload)
-        notify('success', 'Teacher created successfully')
+        const response = await api.post(CREATE_TEACHER_API, payload)
+        notify('success', getApiMessage(response, 'Teacher created successfully'))
       }
 
       closeModal()
@@ -337,14 +348,14 @@ export function TeachersPage() {
     setError('')
 
     try {
-      await requestWithFallbacks([
+      const response = await requestWithFallbacks([
         () => api.delete(DELETE_TEACHER_API(teacherId)),
         () => api.delete(`/teachers/${teacherId}`),
       ])
-      notify('success', 'Teacher deleted successfully')
+      notify('success', getApiMessage(response, 'Teacher deleted successfully'))
       await fetchTeachers()
     } catch (deleteError) {
-      const backendMessage = deleteError?.response?.data?.message || deleteError?.message || 'Failed to delete teacher'
+      const backendMessage = getApiMessage(deleteError, 'Failed to delete teacher')
       notify('error', backendMessage)
       setError(backendMessage)
     } finally {
@@ -463,6 +474,25 @@ export function TeachersPage() {
             {...register('teacher_name', {
               required: 'Teacher name is required',
               validate: (value) => value.trim().length > 0 || 'Teacher name is required',
+            })}
+          />
+          <Input
+            label="Email"
+            type="email"
+            placeholder="Enter email address"
+            autoComplete="email"
+            error={errors.email?.message}
+            {...register('email', {
+              required: 'Email is required',
+              validate: (value) => {
+                const trimmedValue = value.trim()
+                if (!trimmedValue) {
+                  return 'Email is required'
+                }
+
+                const emailPattern = /^[^\s@]+@[^\s@]+\.[^\s@]+$/
+                return emailPattern.test(trimmedValue) || 'Enter a valid email address'
+              },
             })}
           />
           <Input
