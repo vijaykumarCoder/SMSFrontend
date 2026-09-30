@@ -69,62 +69,22 @@ function parseJwt(token) {
   }
 }
 
-function normalizeUser(userData) {
-  if (!userData || typeof userData !== 'object') {
-    return null;
-  }
-
-  const candidates = [
-    userData,
-    userData.user,
-    userData.data,
-    userData.profile,
-  ].filter((candidate) => candidate && typeof candidate === 'object');
-
-  const source =
-    candidates.find(
-      (candidate) =>
-        candidate.name ||
-        candidate.full_name ||
-        candidate.fullName ||
-        candidate.username ||
-        candidate.user_name ||
-        candidate.email ||
-        candidate.role ||
-        candidate.user_role ||
-        candidate.userRole ||
-        candidate.account_type ||
-        candidate.type,
-    ) ?? userData;
-
-  const name =
-    source.name ??
-    source.full_name ??
-    source.fullName ??
-    source.username ??
-    source.user_name ??
-    source.email ??
-    '';
-
-  const role =
-    source.role ??
-    source.user_role ??
-    source.userRole ??
-    source.account_type ??
-    source.type ??
-    '';
-
-  return {
-    ...userData,
-    ...(source !== userData ? source : null),
-    name: String(name).trim(),
-    role: String(role).trim(),
-  };
+function getUserProfile(authData, token) {
+  const profile = authData && typeof authData === "object"
+    ? { ...authData }
+    : parseJwt(token);
+  if (!profile) return null;
+  delete profile.access_token;
+  delete profile.refresh_token;
+  return profile;
 }
 
 export function AuthProvider({ children }) {
   const [accessToken, setAccessToken] = useState(null);
-  const [user, setUser]               = useState(null);
+  const [user, setUser] = useState(() => {
+    try { return JSON.parse(sessionStorage.getItem("auth_user") || "null"); }
+    catch { return null; }
+  });
   const [isLoading, setIsLoading]     = useState(true); // ← IMPORTANT
 
   // ✅ On every app load, try to restore session via refresh token cookie
@@ -143,12 +103,17 @@ export function AuthProvider({ children }) {
         const data = await response.json();
         setToken(data.access_token);
         setAccessToken(data.access_token);
-            setUser(normalizeUser(parseJwt(data.access_token)));
+        setUser((currentUser) => {
+          const restoredUser = getUserProfile(data.user || data.data || currentUser, data.access_token);
+          if (restoredUser) sessionStorage.setItem("auth_user", JSON.stringify(restoredUser));
+          return restoredUser;
+        });
       } catch {
         // Refresh token expired or doesn't exist → user needs to login
         clearToken();
         setAccessToken(null);
         setUser(null);
+        sessionStorage.removeItem("auth_user");
       } finally {
         console.log("Loading...", isLoading)
         setIsLoading(false); // ← done checking, render the app
@@ -158,10 +123,13 @@ export function AuthProvider({ children }) {
     restoreSession();
   }, []);
 
-  const login = useCallback((token, userData = null) => {
+  const login = useCallback((authData) => {
+    const token = typeof authData === "string" ? authData : authData?.access_token;
+    const nextUser = getUserProfile(authData, token);
     setToken(token);
     setAccessToken(token);
-    setUser(normalizeUser(userData) ?? normalizeUser(parseJwt(token)));
+    setUser(nextUser);
+    if (nextUser) sessionStorage.setItem("auth_user", JSON.stringify(nextUser));
   }, []);
 
   const logout = useCallback(async () => {
@@ -174,6 +142,7 @@ export function AuthProvider({ children }) {
     clearToken();
     setAccessToken(null);
     setUser(null);
+    sessionStorage.removeItem("auth_user");
   }, []);
 
   // ✅ Don't render anything until we know the auth state

@@ -1,11 +1,23 @@
-import { Outlet } from 'react-router-dom'
+import { Navigate, Outlet, useLocation } from 'react-router-dom'
 import { useAppStore } from '../../store/appStore'
 import { cn } from '../../utils/helpers'
 import { Navbar } from './Navbar'
 import { Sidebar } from './Sidebar'
+import { useAuth } from '../../context/AuthContext'
 
 export function MainLayout() {
   const sidebarCollapsed = useAppStore((state) => state.sidebarCollapsed)
+  const { user } = useAuth()
+  const location = useLocation()
+  const role = String(user?.role || '').toLowerCase()
+  const studentAllowedPaths = ['/dashboard', '/student-leave-application']
+  const teacherRestrictedPaths = ['/classes', '/registered-students', '/teachers']
+  if (role === 'student' && !studentAllowedPaths.includes(location.pathname)) {
+    return <Navigate to="/dashboard" replace />
+  }
+  if (role === 'teacher' && teacherRestrictedPaths.includes(location.pathname)) {
+    return <Navigate to="/dashboard" replace />
+  }
   const sidebarWidth = sidebarCollapsed ? 'lg:ml-[92px]' : 'lg:ml-[280px]'
 
   return (
